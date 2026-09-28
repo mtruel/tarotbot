@@ -1,0 +1,14 @@
+services:
+  tarotbot:
+    build: .
+    image: tarotbot
+    container_name: tarotbot
+    restart: unless-stopped
+    env_file:
+      - path: .env
+        required: false
+    environment:
+      TZ: Europe/Paris
+    volumes:
+      - ./data:/data
+    user: "1000:1000"

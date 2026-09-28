@@ -3,10 +3,11 @@
 Bot Discord pour compter les points de Tarot entre amis, sur un serveur du homelab.
 
 - Préfixe des commandes : `t/`
-- Scores persistés dans des fichiers JSON (`players.json`, `history.json`)
+- Scores persistés dans des fichiers JSON, dans `data/` (`players.json`, `history.json`)
 - Plusieurs parties par saison, mise en forme d’un classement, courbes d’évolution, et saisie semi-automatique en texte libre
+- Image Docker ARM64 (build `uv` multi-stage) + `docker compose` pour le run sur le Pi
 
-> Documentation homelab : voir [`AGENTS.md`](../AGENTS.md). Ce dossier n’est pas (encore) une stack Docker prod/bêta.
+> Documentation homelab : voir [`AGENTS.md`](../AGENTS.md).
 
 ## Origine et attribution
 
@@ -23,9 +24,9 @@ Ce bot est un projet d’origine externe, récupéré puis adapté pour le homel
 
 - Python 3.12 (les `.pyc` fournis étaient en `cpython-312` ; le code tourne aussi sur les versions 3.x récentes)
 - Un bot Discord et son token ([Discord Developer Portal](https://discord.com/developers/applications))
-- **Aucun Docker** : le bot tourne comme simple process Python
+- [`uv`](https://docs.astral.sh/uv/) pour l’installation locale, ou Docker + `docker compose` pour le déploiement
 
-Dépendances ([`requirements.txt`](requirements.txt)) :
+Dépendances (déclarées dans [`pyproject.toml`](pyproject.toml), versions figées dans [`uv.lock`](uv.lock)) :
 
 | Paquet | Rôle |
 |---|---|
@@ -38,13 +39,23 @@ Dépendances ([`requirements.txt`](requirements.txt)) :
 
 ## Installation
 
+Avec `uv` (recommandé) :
+
+```bash
+uv sync
+# exécution :
+uv run bot.py
+```
+
+Ou au choix, avec `pip` :
+
 ```bash
 pip install -r requirements.txt
 ```
 
 ### Configuration du token
 
-Créer `config.json` à la racine du dossier (fichier **hors Git**, cf. [`.gitignore`](.gitignore)) :
+Les fichiers d’état du bot vivent dans le dossier `data/` (voir [Données](#données)), qui contient notamment `data/config.json` (fichier **hors Git**, cf. [`.gitignore`](.gitignore)) :
 
 ```json
 {
@@ -64,10 +75,29 @@ Le bot active `message_content`. Dans le portail Discord, l’intent **Message C
 
 ## Lancement
 
-En direct :
+### Avec Docker (recommandé en production)
+
+Le build multi-stage ([`Dockerfile`](Dockerfile)) construit le venv avec `uv`, puis l’image finale ne contient que Python et ce venv :
 
 ```bash
-python bot.py
+docker compose up -d --build
+docker compose logs -f tarotbot
+# arrêt :
+docker compose down
+```
+
+Points à connaître :
+
+- Les données sont montées depuis `./data` (bind mount `./data:/data`) ; c’est le répertoire de travail du conteneur, car le bot lit/écrit ses JSON en chemins relatifs.
+- Le conteneur tourne en UID/GID 1000 (`tarot`), donc `data/` doit appartenir à cet utilisateur sur l’hôte.
+- `restart: unless-stopped`, `init: true`, `stop_grace_period: 10s`, `mem_limit: 512m`, logs JSON plafonnés à 3 × 10 Mo, et `TZ=Europe/Paris` pour que `datetime.now()` de `history.py` / `new_season.py` reste à l’heure locale.
+- Aucun secret n’est embarqué dans l’image : le token vit dans `data/config.json`, exclu du contexte de build par [`.dockerignore`](.dockerignore).
+- Un `.env` à la racine est pris en compte s’il existe (`env_file` optionnel), par exemple pour surcharger des variables d’environnement.
+
+### En direct (sans Docker)
+
+```bash
+uv run bot.py
 ```
 
 Ou via le script fourni [`run_bot.sh`](run_bot.sh) :
@@ -75,6 +105,8 @@ Ou via le script fourni [`run_bot.sh`](run_bot.sh) :
 ```bash
 sh run_bot.sh
 ```
+
+> Lancé depuis la racine du dépôt, le bot utilise les JSON de `data/` via les liens symboliques `config.json`, `players.json`, `players_backup.json` et `history.json` : les mêmes données que celles du conteneur.
 
 > `run_bot.sh` n’a pas de shebang valide (la première ligne est `#!` seule) : le lancer avec `sh`, pas `./run_bot.sh`.
 
@@ -85,7 +117,7 @@ Pour garder le bot actif après fermeture du terminal SSH :
 ```bash
 screen -S tarotbot
 # dans la session :
-python bot.py       # ou: sh run_bot.sh
+uv run bot.py       # ou: sh run_bot.sh
 # détacher : CTRL+A puis D
 # ré-attacher plus tard :
 screen -r tarotbot
@@ -189,7 +221,7 @@ Une partie est validée par le bouton **Calcul** de l’interface. Les menus (s�
 
 ## Données
 
-Tous les fichiers d’état sont à la racine du dossier et **exclus de Git** par [`.gitignore`](.gitignore) :
+Tous les fichiers d’état vivent dans `data/` depuis la conteneurisation, et sont **exclus de Git** par [`.gitignore`](.gitignore). À la racine du dépôt, `config.json`, `players.json`, `players_backup.json` et `history.json` sont des liens symboliques vers `data/`, pour que le bot lancé à la main trouve les mêmes fichiers que dans le conteneur (`data/` est monté sur `/data`) :
 
 | Fichier | Contenu |
 |---|---|
@@ -197,7 +229,7 @@ Tous les fichiers d’état sont à la racine du dossier et **exclus de Git** pa
 | `players.json` | Scores cumulés par joueur (`{"Alice": 123, ...}`) |
 | `players_backup.json` | Sauvegarde avant la dernière mise à jour (utilisée par `t/undo`) |
 | `history.json` | Liste des parties : `{"time": "JJ/MM/AAAA, HH:MM:SS", "scores": {...}}` |
-| `curves.png` | Courbe générée par `t/curves` |
+| `curves.png` | Courbe générée par `t/curves` (à la racine du dossier) |
 
 Formats JSON indicatifs :
 
@@ -232,11 +264,21 @@ Le script concatène les `history.json`, additionne les `players.json` de chaque
 ```text
 tarobot-imb/
 ├── bot.py                     # point d'entrée : charge config, crée le client, enregistre les commandes
-├── config.json                # token Discord (hors Git)
+├── pyproject.toml             # dépendances (uv)
+├── uv.lock                    # versions figées
+├── Dockerfile                 # build multi-stage (uv -> venv)
+├── docker-compose.yml         # run : restart, TZ, logs, montage de data/
+├── .dockerignore
+├── data/                      # état du bot (hors Git), monté sur /data
+│   ├── config.json            # token Discord
+│   ├── players.json           # scores cumulés
+│   ├── players_backup.json    # sauvegarde avant la dernière mise à jour
+│   └── history.json           # historique des parties
+├── config.json -> data/…      # liens symboliques vers data/ pour le run local
 ├── run_bot.sh                 # lancement simple
 ├── curves.py                  # t/curves (matplotlib -> curves.png)
 ├── season_stitcher.py         # fusion de saisons (hors commande Discord)
-├── requirements.txt
+├── requirements.txt           # conservé pour un `pip install` hors uv
 ├── tarot_commands/
 │   ├── ping.py                # t/ping
 │   ├── add_player.py          # t/add_player, t/add_players
@@ -256,6 +298,6 @@ tarobot-imb/
 
 - **`t/h` n’est pas branché** : `tarot_commands/h.py` existe mais n’est pas importé dans `bot.py`. La commande est donc indisponible ; utiliser ce README.
 - Le bot ne fonctionne qu’en **commandes à préfixe** `t/` (pas de slash commands).
-- L’état est stocké en **globales de module** et les écritures JSON ne sont pas protégées par verrou : une seule instance à la fois, une saisie à la fois.
+- L’état est stocké en **globales de module** et les écritures JSON ne sont pas protégées par verrou : une seule instance à la fois, une saisie à la fois. Ne pas faire tourner le conteneur et un `uv run bot.py` en local en même temps, ils écriraient dans les mêmes fichiers de `data/`.
 - `t/undo` et `t/new_season` sont **irréversibles** sans accès aux fichiers sur le serveur ; le garde-fou est l’argument `IAMSURE`.
 - `tarot_commands/rules.py` contient aussi `DESCENDANTE_SCORES`, utilisé uniquement pour l’affichage `t/scores_descendante` (le calcul réel se fait dans `game.calcul_score_descendante`).

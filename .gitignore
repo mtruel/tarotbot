@@ -4,6 +4,11 @@ tarot_commands/__pycache__/
 
 # tokens
 config.json
+.env
+
+# données du conteneur (fichiers d'état + sauvegardes de saisons)
+data/*
+!data/.gitkeep
 
 # personal backups
 files_backup/

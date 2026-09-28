@@ -1,0 +1,27 @@
+# Secrets et données locales : jamais dans le contexte de build
+config.json
+players.json
+players_backup.json
+history.json
+curves.png
+.env
+data/
+
+# Environnements / caches
+.venv/
+__pycache__/
+tarot_commands/__pycache__/
+*.pyc
+.idea/
+
+# VCS et divers
+.git/
+.gitignore
+files_backup/
+xp.py
+
+# Sauvegardes de saisons (dossier daté ou nom contenant "saison")
+Saison*/
+BackupSaison*/
+Tournoi*/
+[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]/
