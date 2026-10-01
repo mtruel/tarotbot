@@ -3,6 +3,7 @@ services:
     build: .
     image: tarotbot
     container_name: tarotbot
+    init: true
     restart: unless-stopped
     env_file:
       - path: .env
