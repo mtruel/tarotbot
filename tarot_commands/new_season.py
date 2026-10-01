@@ -5,6 +5,7 @@ import shutil
 import json
 
 from tarot_commands.paths import data_dir
+from tarot_commands.help import error_message
 
 
 @commands.command()
@@ -17,11 +18,17 @@ async def new_season(ctx, s='no'):
     # /data dans le conteneur, ou le dossier de travail est le volume).
     folder = os.path.join(data_dir(), now) + '/'
     if s != 'IAMSURE':
-        await ctx.send('Are you sure though?')
+        await ctx.send(error_message(
+            'new_season',
+            'Pour archiver la saison et repartir à zéro : `t/new_season IAMSURE`',
+        ))
         return
 
     if os.path.isdir(folder):
-        ctx.send('Folder already exists, aborted!')
+        await ctx.send(error_message(
+            'new_season',
+            f'Une saison est déjà archivée aujourd’hui ({now}). Rien n’a été déplacé.',
+        ))
         return
 
     os.makedirs(folder, exist_ok=True)

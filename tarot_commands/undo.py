@@ -2,6 +2,8 @@ import os
 from discord.ext import commands
 import json
 
+from tarot_commands.help import error_message
+
 
 @commands.command()
 async def undo(ctx, s='no'):
@@ -9,11 +11,18 @@ async def undo(ctx, s='no'):
     Retire la dernière partie du leaderboard et de l'historique (IRREVERSIBLE).
     """
     if s != 'IAMSURE':
-        await ctx.send('Are you sure though?')
+        await ctx.send(error_message(
+            'undo',
+            'Pour annuler la dernière partie : `t/undo IAMSURE`',
+        ))
         return
 
     if not os.path.isfile('players_backup.json'):
-        await ctx.send('No backup to load!')
+        await ctx.send(error_message(
+            'undo',
+            'Pas de sauvegarde à restaurer : aucune partie à annuler, '
+            'ou players_backup.json est absent.',
+        ))
         return
 
     with open('players_backup.json', 'r') as f:

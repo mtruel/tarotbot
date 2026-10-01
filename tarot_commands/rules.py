@@ -1,6 +1,8 @@
 from discord.ext import commands
 from table2ascii import table2ascii as t2a
 
+from tarot_commands.help import error_message
+
 POIGNEES = {
     3: {'Simple: 13 Atouts': 20, 'Double: 15 Atouts': 30, 'Triple: 18 Atouts': 40},
     4: {'Simple: 10 Atouts': 20, 'Double: 13 Atouts': 30, 'Triple: 15 Atouts': 40},
@@ -28,8 +30,15 @@ async def poignees(ctx, n_players=5):
     """
     Donne le nombre d'atouts pour les différentes poignées selon le nombre de joueurs "n_players".
     """
+    try:
+        n_players = int(n_players)
+    except (TypeError, ValueError):
+        n_players = None
     if n_players not in [3, 4, 5]:
-        await ctx.send('Le Tarot ne se joue pas à {}.'.format(n_players))
+        await ctx.send(error_message(
+            'poignees',
+            'Le nombre de joueurs doit être 3, 4 ou 5. Exemple : `t/poignees 4`',
+        ))
         return
 
     body = []
@@ -65,7 +74,17 @@ async def scores_descendante(ctx, n_players):
     """
     Scores à la descendante pour [n_players] joueurs
     """
-    n_players = int(n_players)
+    try:
+        n_players = int(n_players)
+    except (TypeError, ValueError):
+        n_players = None
+    if n_players not in DESCENDANTE_SCORES:
+        await ctx.send(error_message(
+            'scores_descendante',
+            'Le nombre de joueurs doit être 3, 4 ou 5. '
+            'Exemple : `t/scores_descendante 4`',
+        ))
+        return
     body = []
     for r, s in DESCENDANTE_SCORES[n_players].items():
         body.append([r, str(s) if s < 0 else '+' + str(s)])

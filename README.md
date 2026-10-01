@@ -131,6 +131,7 @@ Toutes les commandes enregistrées dans [`bot.py`](bot.py) :
 
 | Commande | Description |
 |---|---|
+| `t/help [commande]` | Liste les commandes, ou le détail d’une commande (`t/help auto`) |
 | `t/ping` | Vérifie que le bot répond (`pong!`) |
 | `t/add_player <nom>` | Ajoute un joueur au classement (1 joueur) |
 | `t/add_players <nom1> <nom2> ...` | Ajoute plusieurs joueurs d’un coup |
@@ -289,15 +290,14 @@ tarobot-imb/
 │   ├── undo.py                # t/undo
 │   ├── new_season.py          # t/new_season
 │   ├── history.py             # écriture de history.json
-│   └── h.py                   # aide (t/h) — voir note ci-dessous
+│   └── help.py                # t/help
 ```
 
 ---
 
 ## Notes et limites
 
-- **`t/h` n’est pas branché** : `tarot_commands/h.py` existe mais n’est pas importé dans `bot.py`. La commande est donc indisponible ; utiliser ce README.
-- Le bot ne fonctionne qu’en **commandes à préfixe** `t/` (pas de slash commands).
+- Le bot ne fonctionne qu’en **commandes à préfixe** `t/` (pas de slash commands). L’aide par défaut de discord.py est désactivée : `t/help` liste les commandes, `t/help <commande>` envoie le détail.
 - L’état est stocké en **globales de module** et les écritures JSON ne sont pas protégées par verrou : une seule instance à la fois, une saisie à la fois. Ne pas faire tourner le conteneur et un `uv run bot.py` en local en même temps, ils écriraient dans les mêmes fichiers de `data/`.
 - `t/undo` et `t/new_season` sont **irréversibles** sans accès aux fichiers sur le serveur ; le garde-fou est l’argument `IAMSURE`.
 - `tarot_commands/rules.py` contient aussi `DESCENDANTE_SCORES`, utilisé uniquement pour l’affichage `t/scores_descendante` (le calcul réel se fait dans `game.calcul_score_descendante`).

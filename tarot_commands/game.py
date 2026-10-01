@@ -5,6 +5,7 @@ from tarot_commands.rules import CONTRAT_PAR_BOUT, PRIMES
 from table2ascii import table2ascii as t2a
 from tarot_commands.leaderboard import update_leaderboard
 from tarot_commands.history import update_history
+from tarot_commands.help import error_message
 from unidecode import unidecode
 from collections import OrderedDict
 
@@ -355,14 +356,30 @@ async def game(ctx, value=-999):
     donc il faut rentrer "t/game 5".
     """
     reset_cache()
-    v = int(value)
+    try:
+        v = int(value)
+    except (TypeError, ValueError):
+        await ctx.send(error_message(
+            'game',
+            'Les points de l’attaque doivent être un entier entre 0 et 91, '
+            'sans virgule. Exemple : `t/game 45`',
+        ))
+        return
 
     if v == -999:
-        await ctx.send('Retente avec une valeur! par exemple t/game 10')
+        await ctx.send(error_message(
+            'game',
+            'Il manque les points de l’attaque, un entier entre 0 et 91. '
+            'Exemple : `t/game 45`',
+        ))
         return
 
     if v < 0 or v > 91:
-        await ctx.send("{} n'est pas un nombre de points valide".format(v))
+        await ctx.send(error_message(
+            'game',
+            f'{v} est hors limites. Les points de l’attaque vont de 0 à 91. '
+            'Exemple : `t/game 45`',
+        ))
         return
 
     global GLOBAL_POINTS_ATTAQUE, GLOBAL_REQUEST_MESSAGE_ID
@@ -435,17 +452,33 @@ async def descendante(ctx, *points):
     """
     reset_cache()
     global GLOBAL_DESCENDANTE_POINTS, GLOBAL_REQUEST_MESSAGE_ID
-    points = [int(point) for point in points]
+    try:
+        points = [int(point) for point in points]
+    except (TypeError, ValueError):
+        await ctx.send(error_message(
+            'descendante',
+            'Chaque score doit être un entier entre 0 et 91. '
+            'Exemple : `t/descendante 20 20 51`',
+        ))
+        return
     GLOBAL_DESCENDANTE_POINTS = points
     n_players = len(points)
 
     if n_players not in [3, 4, 5]:
-        await ctx.send('Le Tarot ne se joue pas à {}.'.format(n_players))
+        await ctx.send(error_message(
+            'descendante',
+            f'Il faut 3, 4 ou 5 scores, un par joueur. Reçu : {n_players}. '
+            'Exemple : `t/descendante 20 20 51`',
+        ))
         return
 
     for point in points:
         if point < 0 or point > 91:
-            await ctx.send('Points invalides: {}.'.format(point))
+            await ctx.send(error_message(
+                'descendante',
+                f'{point} est hors limites. Chaque score va de 0 à 91. '
+                'Exemple : `t/descendante 20 20 51`',
+            ))
             return
 
     GLOBAL_REQUEST_MESSAGE_ID = ctx.message.id
@@ -553,19 +586,27 @@ def autoparse(msg):
     if preneur not in PLAYERS:
         if unidecode(preneur).lower() in ['desc', 'descendante']:
             return autoparse_desc(msg)
-        raise ParseError(f'Confused, first word should be a player (Preneur), and {preneur} is not')
+        raise ParseError(
+            f'Le premier mot doit être le preneur, déjà ajouté au classement, '
+            f'ou desc / descendante. « {preneur} » n’est pas un joueur. '
+            f'Vérifie l’orthographe, ou ajoute-le avec `t/add_player {preneur}`.'
+        )
     GLOBAL_GAME_PLAYERS['Preneur'] = [preneur]
 
     if 'petite' in msg.lower():
         GLOBAL_ENCHERE = 1
         if 'garde' in msg.lower():
-            raise ParseError('Confused, found petite and garde in the message')
+            raise ParseError(
+                'Une seule enchère : petite, garde, garde sans ou garde contre.'
+            )
         enchere_name = 'petite'
     elif 'garde' in msg.lower():
         if 'garde sans' in msg.lower():
             GLOBAL_ENCHERE = 4
             if 'garde contre' in msg.lower():
-                raise ParseError('Confused, found garde sans and garde contre in the message')
+                raise ParseError(
+                    'Une seule enchère : garde sans ou garde contre, pas les deux.'
+                )
             enchere_name = 'garde sans'
         elif 'garde contre' in msg.lower():
             GLOBAL_ENCHERE = 6
@@ -574,20 +615,29 @@ def autoparse(msg):
             GLOBAL_ENCHERE = 2  # garde
             enchere_name = 'garde'
     else:
-        raise ParseError('Confused, found no bid info')
+        raise ParseError(
+            'Il manque l’enchère : petite, garde, garde sans ou garde contre. '
+            'Exemple : `t/auto Alice garde 45 2 vs Bob Carol`'
+        )
 
     # find bid location
     enchere_idx = None
     try:
         enchere_idx = find_split_idx_of_subsequence(msg.lower(), enchere_name)
     except ValueError:
-        raise ParseError(f'Confused, could not find parsed bid {enchere_name}')
+        raise ParseError(
+            f'Enchère « {enchere_name} » introuvable dans le message. '
+            'Écris-la en toutes lettres : petite, garde, garde sans ou garde contre.'
+        )
 
     vs_idx = None
     try:
         vs_idx = find_split_idx_of_subsequence(msg.lower(), 'vs')
     except ValueError:
-        raise ParseError('Could not find required keyword <vs>')
+        raise ParseError(
+            'Il manque vs entre l’attaque et la défense. '
+            'Exemple : `t/auto Alice garde 45 2 vs Bob Carol`'
+        )
 
     avec_idx = None
     try:
@@ -599,8 +649,10 @@ def autoparse(msg):
             for e in msg_list[:vs_idx]:
                 if e in PLAYERS and e != preneur:
                     raise ParseError(
-                        f'Parsed a 1 vs rest situation, but found an extra name '
-                        f'{e} other than the preneur {preneur} before vs')
+                        f'« {e} » est avant vs alors que le preneur est {preneur}. '
+                        f'S’il est partenaire : avec {e} avant vs. '
+                        f'S’il défend : place-le après vs.'
+                    )
 
     # find partenaire name
     if avec_idx is not None:
@@ -610,7 +662,7 @@ def autoparse(msg):
                 avec_count += 1
                 GLOBAL_GAME_PLAYERS['Partenaire'].append(e)
             if avec_count > 1:
-                raise ParseError(f'Found more than one partenaire.')
+                raise ParseError('Un seul partenaire après avec.')
 
     # determine segments for attack primes, defense primes and miseres
     # misere
@@ -634,7 +686,11 @@ def autoparse(msg):
                 try:
                     prime_a_idx = find_split_idx_of_subsequence(msg_decode_lower, 'primes att')
                 except ValueError:
-                    raise ParseError(f'expected to find prime att(ack) but didnt')
+                    raise ParseError(
+                        'prime attaque est indiqué mais introuvable. '
+                        'Écris prime attaque puis les primes, '
+                        'par exemple prime attaque petit au bout.'
+                    )
         exists_prime_d = 'prime def' in msg_decode_lower or 'primes def' in msg_decode_lower
         if exists_prime_d:  # find prime(s) défense something
             try:
@@ -643,12 +699,18 @@ def autoparse(msg):
                 try:
                     prime_d_idx = find_split_idx_of_subsequence(msg_decode_lower, 'primes def')
                 except ValueError:
-                    raise ParseError(f'expected to find prime def(ense) but didnt')
+                    raise ParseError(
+                        'prime défense est indiqué mais introuvable. '
+                        'Écris prime défense puis les primes.'
+                    )
         if not (exists_prime_a or exists_prime_d):  # only prime, assume for attack
             try:
                 prime_a_idx = find_split_idx_of_subsequence(msg_decode_lower, 'prime')
             except ValueError:
-                raise ParseError('Expected to find <prime> but didnt')
+                raise ParseError(
+                    'Le mot prime est indiqué mais introuvable. '
+                    'Écris prime, prime attaque ou prime défense.'
+                )
 
     segments_idx = sorted([(k, v) for (k, v) in
                           [('vs', vs_idx), ('prime_a', prime_a_idx), ('prime_d', prime_d_idx), ('misere', misere_idx)]
@@ -666,10 +728,16 @@ def autoparse(msg):
                     GLOBAL_GAME_PLAYERS['Défenseurs'].append(e)
                     def_players_count += 1
             if def_players_count <= 1 or def_players_count >= 5:
-                raise ParseError(f'Parsed 1 or less defenders or 5 or more defenders in {segment_msg_list}')
+                raise ParseError(
+                    f'Après vs, il faut 2, 3 ou 4 défenseurs déjà au classement. '
+                    f'J’en ai trouvé {def_players_count} dans : {" ".join(segment_msg_list)}. '
+                    'Vérifie les noms (t/add_player) et sépare-les par des espaces.'
+                )
             if GLOBAL_GAME_PLAYERS['Partenaire'] and def_players_count != 3:
-                raise ParseError(f'Parsed {def_players_count}!=3 defenders in {segment_msg_list}, '
-                                 f'but found a partenaire')
+                raise ParseError(
+                    f'Avec un partenaire, il faut exactement 3 défenseurs après vs '
+                    f'(partie à 5). J’en ai trouvé {def_players_count}.'
+                )
         elif seg_name == 'prime_a':
             for prime_name in PRIMES.keys():
                 if unidecode(prime_name.lower()) in unidecode(segment_msg.lower()):
@@ -692,7 +760,7 @@ def autoparse(msg):
             GLOBAL_BOUTS = bouts
             found_bouts += 1
         if found_bouts > 1:
-            raise ParseError(f'Found more than one number interpreted as bouts')
+            raise ParseError('Un seul nombre de bouts : 0, 1, 2 ou 3.')
 
     # find score: assume it's the only number over 4 separated by spaces in the msg
     for e in msg_list:
@@ -701,7 +769,10 @@ def autoparse(msg):
             GLOBAL_POINTS_ATTAQUE = int(e)
             found_scores += 1
         if found_scores > 1:
-            raise ParseError(f'Found more than one number interpreted as score')
+            raise ParseError(
+                'Un seul score (un nombre supérieur ou égal à 4). '
+                'Les bouts restent 0, 1, 2 ou 3.'
+            )
 
     reparse = (f"Preneur:    {GLOBAL_GAME_PLAYERS['Preneur']},\n"
                f"Partenaire: {GLOBAL_GAME_PLAYERS['Partenaire']},\n"
@@ -731,10 +802,19 @@ def autoparse_desc(msg):
     for e_idx, e in enumerate(msg_list):
         if e in PLAYERS:
             if e_idx == len(msg_list) - 1 or not msg_list[e_idx + 1].isnumeric():
-                raise ParseError(f'Could not find a score for {e}')
+                raise ParseError(
+                    f'Il manque le score de {e}. '
+                    'Forme : `t/auto descendante Alice 20 Bob 20 Carol 51`'
+                )
             GLOBAL_DESCENDANTE_PLAYERS[f'#{player_idx}'] = e
             GLOBAL_DESCENDANTE_POINTS.append(int(msg_list[e_idx + 1]))
             player_idx += 1
+
+    if player_idx == 1:
+        raise ParseError(
+            'Aucun joueur reconnu. Forme : `t/auto descendante Alice 20 Bob 20 Carol 51` '
+            '(noms déjà au classement, chacun suivi de son score).'
+        )
 
     reparse = f"Descendante:\n"
     for player_score, player in list(zip(GLOBAL_DESCENDANTE_POINTS, GLOBAL_DESCENDANTE_PLAYERS.values())):
@@ -763,7 +843,7 @@ async def auto(ctx, *, value):
         reparse = autoparse(value)  # affects global values for the game information
     except ParseError as e:
         reset_cache()
-        await ctx.send(e.args[0])
+        await ctx.send(error_message('auto', e.args[0]))
         return
     GLOBAL_REQUEST_MESSAGE_ID = ctx.message.id
     msg = '**Is this parse correct?:**\n' + reparse
