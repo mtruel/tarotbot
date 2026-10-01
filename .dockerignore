@@ -5,6 +5,7 @@ players_backup.json
 history.json
 curves.png
 .env
+# contient l'état du bot et tous les dossiers de saisons archivés
 data/
 
 # Environnements / caches
@@ -19,9 +20,3 @@ tarot_commands/__pycache__/
 .gitignore
 files_backup/
 xp.py
-
-# Sauvegardes de saisons (dossier daté ou nom contenant "saison")
-Saison*/
-BackupSaison*/
-Tournoi*/
-[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]/

@@ -4,6 +4,8 @@ from datetime import datetime
 import shutil
 import json
 
+from tarot_commands.paths import data_dir
+
 
 @commands.command()
 async def new_season(ctx, s='no'):
@@ -11,7 +13,9 @@ async def new_season(ctx, s='no'):
     Commence une nouvelle saison (IRREVERSIBLE SANS ACCÈS AU SERVEUR)
     """
     now = datetime.today().strftime('%Y-%m-%d')
-    folder = now + '/'
+    # Les archives sont rangees avec les fichiers d'etat (data/ en local,
+    # /data dans le conteneur, ou le dossier de travail est le volume).
+    folder = os.path.join(data_dir(), now) + '/'
     if s != 'IAMSURE':
         await ctx.send('Are you sure though?')
         return
@@ -20,7 +24,7 @@ async def new_season(ctx, s='no'):
         ctx.send('Folder already exists, aborted!')
         return
 
-    os.makedirs(folder)
+    os.makedirs(folder, exist_ok=True)
     shutil.move('players.json', folder + 'players.json')
     shutil.move('history.json', folder + 'history.json')
     shutil.move('players_backup.json', folder + 'players_backup.json')

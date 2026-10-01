@@ -247,15 +247,15 @@ Formats JSON indicatifs :
 
 ## Saisons
 
-- `t/new_season IAMSURE` déplace `players.json`, `history.json` et `players_backup.json` dans un dossier daté `AAAA-MM-JJ/`, puis repart sur des fichiers vides.
-- Les dossiers de saison archivés du dépôt : `Saison1_2026-01-06/`, `Saison2_2026-03-02/`, `BackupSaison3_2026-03-05AvantTournoiTarot/`, `TournoiTarot05_03_26/`, `2026-05-04/`, `2026-07-24/`.
+- `t/new_season IAMSURE` déplace `players.json`, `history.json` et `players_backup.json` dans un dossier daté `data/AAAA-MM-JJ/`, puis repart sur des fichiers vides.
+- Les dossiers de saison archivés du dépôt sont dans `data/` : `Saison1_2026-01-06/`, `Saison2_2026-03-02/`, `BackupSaison3_2026-03-05AvantTournoiTarot/`, `TournoiTarot05_03_26/`, `2026-05-04/`, `2026-07-24/`, ainsi que `testseason/`.
 - [`season_stitcher.py`](season_stitcher.py) recombine plusieurs saisons (dont le nom contient `saison`) :
 
 ```bash
-python season_stitcher.py
+uv run season_stitcher.py
 ```
 
-Le script concatène les `history.json`, additionne les `players.json` de chaque saison, puis régénère `curves.png` et affiche les deux classements en console. **Il écrit dans `players.json` / `history.json`** : faire une copie de sauvegarde avant.
+Le script concatène les `history.json`, additionne les `players.json` de chaque saison (lus depuis `data/`, surchargeable via `TAROTBOT_DATA_DIR`), puis régénère `curves.png` et affiche les deux classements en console. **Il écrit dans `players.json` / `history.json`** : faire une copie de sauvegarde avant.
 
 ---
 
@@ -273,7 +273,8 @@ tarobot-imb/
 │   ├── config.json            # token Discord
 │   ├── players.json           # scores cumulés
 │   ├── players_backup.json    # sauvegarde avant la dernière mise à jour
-│   └── history.json           # historique des parties
+│   ├── history.json           # historique des parties
+│   └── <AAAA-MM-JJ>/          # saisons archivées (players/history/backup)
 ├── config.json -> data/…      # liens symboliques vers data/ pour le run local
 ├── run_bot.sh                 # lancement simple
 ├── curves.py                  # t/curves (matplotlib -> curves.png)
@@ -289,7 +290,6 @@ tarobot-imb/
 │   ├── new_season.py          # t/new_season
 │   ├── history.py             # écriture de history.json
 │   └── h.py                   # aide (t/h) — voir note ci-dessous
-└── <saisons archivées>/
 ```
 
 ---
