@@ -12,22 +12,32 @@ async def undo(ctx, s='no'):
         await ctx.send('Are you sure though?')
         return
 
-    if not os.path.isfile('players.json'):
+    if not os.path.isfile('players_backup.json'):
         await ctx.send('No backup to load!')
         return
 
     with open('players_backup.json', 'r') as f:
-        PLAYERS = json.load(f)
+        players = json.load(f)
 
     with open('players.json', 'w') as f:
-        json.dump(PLAYERS, f, indent=4)
+        json.dump(players, f, indent=4)
 
     with open('history.json', 'r') as f:
-        HISTORY = json.load(f)
+        history = json.load(f)
 
-    HISTORY = HISTORY[:-1]
+    history = history[:-1]
 
     with open('history.json', 'w') as f:
-        json.dump(HISTORY, f, indent=4)
+        json.dump(history, f, indent=4)
+
+    # Le backup doit decrire l'etat d'avant la donne desormais derniere.
+    # Sinon un second undo retire l'historique sans retirer les points.
+    backup = dict(players)
+    if history:
+        for name, score in history[-1]['scores'].items():
+            backup[name] = backup.get(name, 0) - score
+
+    with open('players_backup.json', 'w') as f:
+        json.dump(backup, f, indent=4)
 
     await ctx.send('Undo successful!')
