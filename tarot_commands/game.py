@@ -22,11 +22,15 @@ GLOBAL_POINTS_ATTAQUE = None
 GLOBAL_DESCENDANTE_PLAYERS = {'#1': None, '#2': None, '#3': None, '#4': None, '#5': None}
 GLOBAL_DESCENDANTE_POINTS = []
 GLOBAL_MISERES = []
+GLOBAL_REQUEST_MESSAGE_ID = None
+
+ENCHERE_NAMES = {1: 'Petite', 2: 'Garde', 4: 'GardeSans', 6: 'GardeContre'}
 
 
 def reset_cache():
     global GLOBAL_ENCHERE, GLOBAL_GAME_PLAYERS, GLOBAL_BOUTS, GLOBAL_PRIMES_ATTAQUE, GLOBAL_PRIMES_DEFENSE, \
-        GLOBAL_POINTS_ATTAQUE, GLOBAL_DESCENDANTE_PLAYERS, GLOBAL_MISERES, GLOBAL_DESCENDANTE_POINTS
+        GLOBAL_POINTS_ATTAQUE, GLOBAL_DESCENDANTE_PLAYERS, GLOBAL_MISERES, GLOBAL_DESCENDANTE_POINTS, \
+        GLOBAL_REQUEST_MESSAGE_ID
     GLOBAL_ENCHERE = None
     GLOBAL_GAME_PLAYERS = {'Preneur': [], 'Partenaire': [], 'Défenseurs': []}
     GLOBAL_BOUTS = None
@@ -36,6 +40,36 @@ def reset_cache():
     GLOBAL_DESCENDANTE_PLAYERS = {'#1': None, '#2': None, '#3': None, '#4': None, '#5': None}
     GLOBAL_DESCENDANTE_POINTS = []
     GLOBAL_MISERES = []
+    GLOBAL_REQUEST_MESSAGE_ID = None
+
+
+def partie_details():
+    partenaire = GLOBAL_GAME_PLAYERS['Partenaire']
+    return {
+        'message_id': GLOBAL_REQUEST_MESSAGE_ID,
+        'type': 'partie',
+        'enchere': ENCHERE_NAMES.get(GLOBAL_ENCHERE, GLOBAL_ENCHERE),
+        'multiplicateur': GLOBAL_ENCHERE,
+        'preneur': GLOBAL_GAME_PLAYERS['Preneur'][0],
+        'partenaire': partenaire[0] if partenaire else None,
+        'defenseurs': list(GLOBAL_GAME_PLAYERS['Défenseurs']),
+        'bouts': GLOBAL_BOUTS,
+        'points_attaque': GLOBAL_POINTS_ATTAQUE,
+        'primes_attaque': list(GLOBAL_PRIMES_ATTAQUE),
+        'primes_defense': list(GLOBAL_PRIMES_DEFENSE),
+        'miseres': list(GLOBAL_MISERES),
+    }
+
+
+def descendante_details():
+    joueurs = [p for p in GLOBAL_DESCENDANTE_PLAYERS.values() if p]
+    return {
+        'message_id': GLOBAL_REQUEST_MESSAGE_ID,
+        'type': 'descendante',
+        'joueurs': joueurs,
+        'points': list(GLOBAL_DESCENDANTE_POINTS),
+        'miseres': list(GLOBAL_MISERES),
+    }
 
 
 class SelectEnchere(discord.ui.Select):
@@ -268,7 +302,7 @@ class GameCalculButton(discord.ui.View):
 
         scores = calcul_scores()
         update_leaderboard(scores)
-        update_history(scores)
+        update_history(scores, partie_details())
         button.disabled = True  # After updating the score!
         reset_cache()
         await interaction.response.edit_message(view=self)
@@ -303,7 +337,7 @@ class DescendanteCalculButton(discord.ui.View):
         scores = calcul_score_descendante(GLOBAL_DESCENDANTE_PLAYERS, GLOBAL_DESCENDANTE_POINTS)
         scores = affecte_miseres(scores)
         update_leaderboard(scores)
-        update_history(scores)
+        update_history(scores, descendante_details())
         button.disabled = True  # After updating the score!
         reset_cache()
         await interaction.response.edit_message(view=self)
@@ -331,8 +365,9 @@ async def game(ctx, value=-999):
         await ctx.send("{} n'est pas un nombre de points valide".format(v))
         return
 
-    global GLOBAL_POINTS_ATTAQUE
+    global GLOBAL_POINTS_ATTAQUE, GLOBAL_REQUEST_MESSAGE_ID
     GLOBAL_POINTS_ATTAQUE = v
+    GLOBAL_REQUEST_MESSAGE_ID = ctx.message.id
     await ctx.send("Alors? 👀", view=SelectViewGame())
     await ctx.send("Des primes?", view=SelectViewPrimes())
     await ctx.send("", view=GameCalculButton())
@@ -399,7 +434,7 @@ async def descendante(ctx, *points):
     sont 20, 20 et 51.
     """
     reset_cache()
-    global GLOBAL_DESCENDANTE_POINTS
+    global GLOBAL_DESCENDANTE_POINTS, GLOBAL_REQUEST_MESSAGE_ID
     points = [int(point) for point in points]
     GLOBAL_DESCENDANTE_POINTS = points
     n_players = len(points)
@@ -413,6 +448,7 @@ async def descendante(ctx, *points):
             await ctx.send('Points invalides: {}.'.format(point))
             return
 
+    GLOBAL_REQUEST_MESSAGE_ID = ctx.message.id
     await ctx.send("Somme des points = {}.\nJoueurs respectifs:".format(sum(points)), view=SelectViewDescendante())
     await ctx.send("", view=DescendanteCalculButton())
 
@@ -722,13 +758,14 @@ async def auto(ctx, *, value):
 
     """
     reset_cache()
-    global GLOBAL_DESCENDANTE_POINTS
+    global GLOBAL_DESCENDANTE_POINTS, GLOBAL_REQUEST_MESSAGE_ID
     try:
         reparse = autoparse(value)  # affects global values for the game information
     except ParseError as e:
         reset_cache()
         await ctx.send(e.args[0])
         return
+    GLOBAL_REQUEST_MESSAGE_ID = ctx.message.id
     msg = '**Is this parse correct?:**\n' + reparse
     if reparse[:13] == 'Descendante:\n':  # parsed a descendante
         await ctx.send(f"Somme des points = {sum(GLOBAL_DESCENDANTE_POINTS)}." + msg,
