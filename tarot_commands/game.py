@@ -568,6 +568,21 @@ def clean_msg(msg):
     return msg.replace('.', '').replace(',', '').replace(':', '').replace(';', '').replace("'", '').replace('"', '')
 
 
+def player_index(players):
+    """Index casse ignorée vers l’orthographe enregistrée. Le premier nom gagne en cas de doublon."""
+    index = {}
+    for name in players:
+        index.setdefault(name.casefold(), name)
+    return index
+
+
+def resolve_player(token, players, index):
+    """Retourne le nom du classement, ou None. Une graphie exacte l’emporte sur la casse."""
+    if token in players:
+        return token
+    return index.get(token.casefold())
+
+
 def autoparse(msg):
     global GLOBAL_ENCHERE, GLOBAL_GAME_PLAYERS, GLOBAL_BOUTS, GLOBAL_PRIMES_ATTAQUE, GLOBAL_PRIMES_DEFENSE, \
         GLOBAL_POINTS_ATTAQUE, GLOBAL_DESCENDANTE_PLAYERS, GLOBAL_MISERES, GLOBAL_DESCENDANTE_POINTS
@@ -581,15 +596,17 @@ def autoparse(msg):
 
     with open('players.json', 'r') as f:
         PLAYERS = json.load(f)
+    names = player_index(PLAYERS)
 
-    preneur = msg_list[0]
-    if preneur not in PLAYERS:
-        if unidecode(preneur).lower() in ['desc', 'descendante']:
+    preneur_token = msg_list[0]
+    preneur = resolve_player(preneur_token, PLAYERS, names)
+    if preneur is None:
+        if unidecode(preneur_token).lower() in ['desc', 'descendante']:
             return autoparse_desc(msg)
         raise ParseError(
             f'Le premier mot doit être le preneur, déjà ajouté au classement, '
-            f'ou desc / descendante. « {preneur} » n’est pas un joueur. '
-            f'Vérifie l’orthographe, ou ajoute-le avec `t/add_player {preneur}`.'
+            f'ou desc / descendante. « {preneur_token} » n’est pas un joueur. '
+            f'Vérifie l’orthographe, ou ajoute-le avec `t/add_player {preneur_token}`.'
         )
     GLOBAL_GAME_PLAYERS['Preneur'] = [preneur]
 
@@ -647,10 +664,11 @@ def autoparse(msg):
             avec_idx = msg_lower_list.index('with')
         except ValueError:  # parsed 1 vs rest, check that only 1 name before vs
             for e in msg_list[:vs_idx]:
-                if e in PLAYERS and e != preneur:
+                matched = resolve_player(e, PLAYERS, names)
+                if matched and matched != preneur:
                     raise ParseError(
-                        f'« {e} » est avant vs alors que le preneur est {preneur}. '
-                        f'S’il est partenaire : avec {e} avant vs. '
+                        f'« {matched} » est avant vs alors que le preneur est {preneur}. '
+                        f'S’il est partenaire : avec {matched} avant vs. '
                         f'S’il défend : place-le après vs.'
                     )
 
@@ -658,9 +676,10 @@ def autoparse(msg):
     if avec_idx is not None:
         avec_count = 0
         for e in msg_list[avec_idx:vs_idx]:
-            if e in PLAYERS:
+            matched = resolve_player(e, PLAYERS, names)
+            if matched:
                 avec_count += 1
-                GLOBAL_GAME_PLAYERS['Partenaire'].append(e)
+                GLOBAL_GAME_PLAYERS['Partenaire'].append(matched)
             if avec_count > 1:
                 raise ParseError('Un seul partenaire après avec.')
 
@@ -724,8 +743,9 @@ def autoparse(msg):
         if seg_name == 'vs':
             def_players_count = 0
             for e in segment_msg_list:
-                if e in PLAYERS:
-                    GLOBAL_GAME_PLAYERS['Défenseurs'].append(e)
+                matched = resolve_player(e, PLAYERS, names)
+                if matched:
+                    GLOBAL_GAME_PLAYERS['Défenseurs'].append(matched)
                     def_players_count += 1
             if def_players_count <= 1 or def_players_count >= 5:
                 raise ParseError(
@@ -750,8 +770,9 @@ def autoparse(msg):
 
         elif seg_name == 'misere':
             for e in segment_msg_list:
-                if e in PLAYERS:
-                    GLOBAL_MISERES.append(e)
+                matched = resolve_player(e, PLAYERS, names)
+                if matched:
+                    GLOBAL_MISERES.append(matched)
 
     # find number of bouts: assume it's the only number between 0 and 3 separated by spaces
     for bouts in [0, 1, 2, 3]:
@@ -774,6 +795,12 @@ def autoparse(msg):
                 'Les bouts restent 0, 1, 2 ou 3.'
             )
 
+    if GLOBAL_POINTS_ATTAQUE is None:
+        raise ParseError(
+            'Il manque le score de l’attaque : un nombre supérieur ou égal à 4. '
+            'Exemple : `t/auto Alice garde 45 2 vs Bob Carol`'
+        )
+
     reparse = (f"Preneur:    {GLOBAL_GAME_PLAYERS['Preneur']},\n"
                f"Partenaire: {GLOBAL_GAME_PLAYERS['Partenaire']},\n"
                f"Score:      {GLOBAL_POINTS_ATTAQUE},\n"
@@ -783,6 +810,12 @@ def autoparse(msg):
                f"Primes Att: {GLOBAL_PRIMES_ATTAQUE},\n"
                f"Primes Déf: {GLOBAL_PRIMES_DEFENSE},\n"
                f"Misères:    {GLOBAL_MISERES}")
+
+    if GLOBAL_BOUTS is None:
+        reparse += (
+            '\n⚠️ Aucun bout (0, 1, 2 ou 3). '
+            'Le bouton Calcul refusera tant qu’ils manquent.'
+        )
 
     return reparse
 
@@ -797,16 +830,18 @@ def autoparse_desc(msg):
 
     with open('players.json', 'r') as f:
         PLAYERS = json.load(f)
+    names = player_index(PLAYERS)
 
     player_idx = 1
     for e_idx, e in enumerate(msg_list):
-        if e in PLAYERS:
+        matched = resolve_player(e, PLAYERS, names)
+        if matched:
             if e_idx == len(msg_list) - 1 or not msg_list[e_idx + 1].isnumeric():
                 raise ParseError(
-                    f'Il manque le score de {e}. '
+                    f'Il manque le score de {matched}. '
                     'Forme : `t/auto descendante Alice 20 Bob 20 Carol 51`'
                 )
-            GLOBAL_DESCENDANTE_PLAYERS[f'#{player_idx}'] = e
+            GLOBAL_DESCENDANTE_PLAYERS[f'#{player_idx}'] = matched
             GLOBAL_DESCENDANTE_POINTS.append(int(msg_list[e_idx + 1]))
             player_idx += 1
 

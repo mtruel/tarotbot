@@ -1,6 +1,8 @@
 from discord.ext import commands  # type: ignore
 import json
 
+from tarot_commands.game import player_index, resolve_player
+
 
 @commands.command()
 async def add_player(ctx, player_name):
@@ -10,8 +12,9 @@ async def add_player(ctx, player_name):
     with open('players.json', 'r') as f:
         PLAYERS = json.load(f)
 
-    if player_name in PLAYERS:
-        await ctx.send('{} is already listed!'.format(player_name))
+    existing = resolve_player(player_name, PLAYERS, player_index(PLAYERS))
+    if existing:
+        await ctx.send('{} is already listed!'.format(existing))
 
     else:
         PLAYERS[player_name] = 0
@@ -29,16 +32,18 @@ async def add_players(ctx, *, msg):
     """
     with open('players.json', 'r') as f:
         PLAYERS = json.load(f)
+    names = player_index(PLAYERS)
     names_already_listed = []
     names_added = []
 
     for player_name in msg.split(' '):
-
-        if player_name in PLAYERS:
-            names_already_listed.append(player_name)
+        existing = resolve_player(player_name, PLAYERS, names)
+        if existing:
+            names_already_listed.append(existing)
 
         else:
             PLAYERS[player_name] = 0
+            names[player_name.casefold()] = player_name
             names_added.append(player_name)
 
     with open('players.json', 'w') as f:

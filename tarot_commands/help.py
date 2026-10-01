@@ -24,7 +24,8 @@ COMMANDS = [
         't/add_player <nom>',
         'ajoute un joueur au classement',
         'Ajoute un joueur avec un score de 0.\n'
-        'Le nom est un seul mot. S’il est déjà présent, rien n’est modifié.\n'
+        'Le nom est un seul mot. S’il est déjà présent, rien n’est modifié '
+        '(la casse est ignorée).\n'
         'Exemple : `t/add_player Alice`',
     ),
     (
@@ -79,7 +80,10 @@ COMMANDS = [
         '```\n'
         '**Enchères :** petite, garde, garde sans, garde contre.\n'
         '**Primes :** simple poignee, double poignee, triple poignee, petit au bout, '
-        'chelem annoncé, chelem non annoncé, chelem chuté.',
+        'chelem annoncé, chelem non annoncé, chelem chuté.\n'
+        'La casse des noms n’a pas d’importance : `alice` retrouve `Alice`.\n'
+        'Le score (nombre ≥ 4) est obligatoire. Sans bouts (0, 1, 2 ou 3), '
+        'un avertissement est affiché.',
     ),
     (
         'descendante',
