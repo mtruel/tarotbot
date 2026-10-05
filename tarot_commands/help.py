@@ -139,6 +139,37 @@ COMMANDS = [
         'Dessine l’historique des scores et envoie l’image dans le salon. '
         'Aucun argument.',
     ),
+    (
+        'export',
+        't/export [backup]',
+        'envoie une archive zip des données',
+        'Sans argument, construit un zip avec les fichiers d’état '
+        '(`players.json`, `history.json`, `players_backup.json`) et tous les '
+        'dossiers de saisons archivées, puis l’envoie en pièce jointe dans le '
+        'salon.\n'
+        'Avec `backup`, crée un snapshot restic dans le dépôt **local** '
+        '(`data/restic`) et renvoie le zip du dépôt (historique complet) ; la '
+        'copie vers Google Drive (ajout seul, `restic copy`) se fait **ensuite** '
+        'en arrière-plan (message de confirmation quand c’est fini). La '
+        'restauration exige le mot de passe restic (`RESTIC_PASSWORD`).\n'
+        'Archive plafonnée à la limite d’upload Discord.',
+    ),
+    (
+        'restore',
+        't/restore IAMSURE [backup] (+ archive zip)',
+        'restaure les données depuis une archive ou restic (RÉSERVÉ AUX ADMINS)',
+        'Restaure `players.json`, `history.json` et `players_backup.json` depuis '
+        'une archive `.zip` en pièce jointe (par exemple celle de `t/export`) '
+        'ou, avec `backup`, depuis le dernier snapshot restic.\n'
+        'Le bot demande confirmation par message et joint une backup des '
+        'données actuelles.\n'
+        'Pour confirmer, taper **exactement** `ecraser_saison_en_cours` '
+        '(le budget est de 60 s ; une faute de frappe est signalée).\n'
+        '`players_backup.json` est recalculé à partir du `players.json` restauré '
+        '(pour que `t/undo` reste cohérent).\n'
+        'Les dossiers de saisons archivées ne sont pas modifiés.\n'
+        'Commande réservée aux administrateurs du serveur.',
+    ),
 ]
 
 
@@ -194,6 +225,12 @@ def explain_command_error(ctx, error):
     if isinstance(error, commands.BadArgument):
         return error_message(name, 'Argument invalide. Vérifie la forme de la commande.')
 
+    if isinstance(error, commands.CheckFailure):
+        return error_message(
+            name,
+            'Cette commande est réservée aux administrateurs du serveur.',
+        )
+
     return None
 
 
@@ -242,6 +279,11 @@ def _too_many_text(name):
         'leaderboard2': '`t/leaderboard2` ne prend pas d’argument.',
         'contrats': '`t/contrats` ne prend pas d’argument.',
         'curves': '`t/curves` ne prend pas d’argument.',
+        'export': '`t/export` ou `t/export backup` — aucun autre argument.',
+        'restore': (
+            'Usage : `t/restore IAMSURE` avec une archive `.zip` en pièce jointe, '
+            'ou `t/restore IAMSURE backup` pour le dernier snapshot restic.'
+        ),
     }
     if name in texts:
         return texts[name]

@@ -142,6 +142,9 @@ Toutes les commandes enregistrées dans [`bot.py`](bot.py) :
 | `t/contrats` | Rappel des points à atteindre selon le nombre de bouts |
 | `t/scores_descendante <n>` | Rappel des scores de descendante pour `n` joueurs |
 | `t/curves` | Génère `curves.png` et l’envoie dans le salon |
+| `t/export` | Envoie un zip des données (scores, historique, saisons archivées) en pièce jointe |
+| `t/export backup` | Snapshot local + zip du dépôt ; copie Drive (ajout seul) ensuite (message quand c’est fini) |
+| `t/restore IAMSURE [backup]` | Restaure depuis un zip joint ou le dernier snapshot restic (admins, confirmation requise) |
 
 ### Nombre de joueurs
 
@@ -255,6 +258,131 @@ Le script concatène les `history.json`, additionne les `players.json` de chaque
 
 ---
 
+## Sauvegarde automatique (restic local → copie Google Drive)
+
+Un snapshot **restic** de tout `data/` (hors secrets, artefacts et dépôt lui-même) est créé chaque jour à **3 h** dans un dépôt **local** (`/data/restic`, monté avec le volume `./data`). restic **chiffre** et **déduplique**. Ce dépôt local est ensuite **copié** vers Google Drive avec `restic copy`, et un zip de la dernière version (`tarotbot-latest.zip`) est déposé à côté.
+
+### Fonctionnement
+
+- `backup/backup.sh` exécute `python -m tarot_commands.backup_lib` : init du dépôt local si besoin, snapshot de `/data` (exclut `config.json`, `.env`, `token.json`, `curves.png`, `restic/`, `restore/`), rotation locale, **`restic copy`** vers `rclone:gdrive:<BACKUP_DEST_PATH>/restic`, rotation Drive, puis dépôt de `tarotbot-latest.zip`.
+- Google Drive héberge un **second dépôt restic autonome**, alimenté uniquement par `restic copy` : **ajout seul**. Il n'y a donc jamais de suppression ni de réécriture côté Drive, et un dépôt local vide ou recréé ne peut pas écraser l'historique Drive. Chaque dépôt a sa propre rétention.
+- La **rotation grand-père / père / fils** vit dans [`tarot_commands/backup_lib.py`](tarot_commands/backup_lib.py) : tous les snapshots sur **30 jours**, puis **le plus récent de chaque semaine** **pendant ~6 mois**, puis **le plus récent de chaque mois civil** (**sans limite**) au-delà.
+- `t/export backup` : snapshot + zip du dépôt **local**, réponse Discord, puis **`restic copy`** vers Drive en arrière-plan.
+- `backup/entrypoint.sh` démarre [`supercronic`](https://github.com/aptible/supercronic) en tâche de fond, puis le bot au premier plan.
+- `backup/crontab` : `0 3 * * * /usr/local/bin/backup.sh`.
+- `rclone`, `restic` et `supercronic` sont installés dans l’image ([`Dockerfile`](Dockerfile)) ; le token Google est fourni par variables d’environnement.
+
+### Configuration
+
+Le remote rclone est piloté par variables d’environnement, lues depuis le `.env` (cf. [Configuration du token](#configuration-du-token)) :
+
+```bash
+# Remote rclone : RCLONE_CONFIG_<REMOTE>_<OPTION> (ici le remote s'appelle gdrive)
+RCLONE_CONFIG_GDRIVE_TYPE=drive
+RCLONE_CONFIG_GDRIVE_SCOPE=drive
+RCLONE_CONFIG_GDRIVE_ROOT_FOLDER_ID=<ID_DU_DOSSIER_DRIVE>
+RCLONE_CONFIG_GDRIVE_TOKEN={"access_token":"…","token_type":"Bearer","refresh_token":"…","expiry":"…"}
+
+# Mot de passe du dépôt restic (optionnel : un défaut est en dur dans le code).
+# RESTIC_PASSWORD=<MOT_DE_PASSE_RESTIC>
+```
+
+Le token OAuth se génère **depuis un poste avec navigateur** (le Pi est *headless*) :
+
+```bash
+rclone authorize "drive"
+```
+
+Copier le JSON affiché dans `RCLONE_CONFIG_GDRIVE_TOKEN` (sans guillemets englobants dans le `.env`). `ROOT_FOLDER_ID` cible le dossier Drive de destination ; `BACKUP_DEST_PATH` (optionnel, défaut `TarotBot`) choisit un sous-dossier. Le dépôt restic **local** vit dans `/data/restic` (surchargeable par `RESTIC_REPOSITORY`) ; le dépôt **Drive** est `rclone:gdrive:<BACKUP_DEST_PATH>/restic`. Le zip de la dernière version est déposé en `<BACKUP_DEST_PATH>/tarotbot-latest.zip` (écrasé à chaque sauvegarde).
+
+> `RESTIC_PASSWORD` n'est pas obligatoire : par défaut, le mot de passe `DEFAULT_PASSWORD` est défini dans [`tarot_commands/backup_lib.py`](tarot_commands/backup_lib.py). Pour utiliser un autre secret, le définir via `RESTIC_PASSWORD` (ou `RESTIC_PASSWORD_FILE` / `RESTIC_PASSWORD_COMMAND`) dans `.env`. Pour **le changer après coup**, utiliser `restic key passwd` (dépôt local) et `restic -r rclone:gdrive:TarotBot/restic key passwd` (Drive) : inutile de recréer les dépôts.
+
+La politique de rotation peut être ajustée (optionnel) via `BACKUP_KEEP_RECENT_DAYS` (défaut `30`) et `BACKUP_KEEP_WEEKLY_DAYS` (défaut `183`). Le `prune` lourd sur Drive n'a lieu qu'un jour par semaine (`BACKUP_REMOTE_PRUNE_WEEKDAY`, défaut `6` = dimanche), pour limiter les appels à l'API Google ; les snapshots à retirer sont eux calculés à chaque sauvegarde.
+
+### Déclencher / surveiller
+
+```bash
+# Lancer une sauvegarde immédiate, sans attendre 3 h :
+./run_backup.sh          # conteneur jetable, ou :
+docker compose exec tarotbot /usr/local/bin/backup.sh
+# Suivre les logs (supercronic et le bot écrivent sur stdout) :
+docker compose logs -f tarotbot
+```
+
+[`run_backup.sh`](run_backup.sh) enveloppe la première commande (`docker compose run --rm --entrypoint /usr/local/bin/backup.sh tarotbot`) depuis la racine du dépôt.
+
+### Restauration
+
+Trois façons, selon la situation. Les sources possibles :
+
+- une **photo de `data/`** en zip : `t/export`, `tarotbot-latest.zip` sur le Drive, ou une ancienne archive ;
+- un **snapshot restic** (parmi tout l’historique, y compris les versions passées) ;
+- l’**archive complète du dépôt restic** (`t/export backup`) : elle contient *tout* l’historique, mais se relit avec `restic` (voir plus bas), pas comme un simple zip.
+
+**1. Depuis Discord — `t/restore` (réservé aux administrateurs)**
+
+```
+t/restore IAMSURE          ← avec une archive .zip en pièce jointe
+t/restore IAMSURE backup   ← depuis le dernier snapshot restic
+```
+
+Le bot valide la source, répond que l'opération est **destructive**, joint une **backup des données actuelles**, puis demande de taper exactement `ecraser_saison_en_cours` (budget 60 s ; une faute de frappe est signalée puis l'attente reprend). Après confirmation : `Restauration effectuée`.
+
+**2. En ligne de commande — `run_restore.sh`** (quand le bot ne démarre plus)
+
+```bash
+./run_restore.sh ecraser_saison_en_cours /chemin/vers/backup.zip
+./run_restore.sh ecraser_saison_en_cours backup          # dernier snapshot restic
+./run_restore.sh ecraser_saison_en_cours <id-snapshot>   # snapshot restic précis
+```
+
+Le mot de confirmation doit être **exact**. Le script arrête le bot, restaure, puis le redémarre. Il partage la validation de `t/restore` (via [`tarot_commands/restore_lib.py`](tarot_commands/restore_lib.py)).
+
+**3. Manuellement, depuis le dépôt restic (local ou Drive)**
+
+```bash
+docker compose exec -e RESTIC_PASSWORD=TAROTBOT_PASSWORD tarotbot \
+  restic -r /data/restic snapshots
+docker compose exec -e RESTIC_PASSWORD=TAROTBOT_PASSWORD tarotbot \
+  restic -r /data/restic restore latest --target /tmp/restore
+# copier players.json / history.json / players_backup.json depuis
+# /tmp/restore/ vers ./data, puis :
+docker compose up -d
+```
+
+Si le dépôt **local** est perdu, Drive en contient une copie autonome, lisible directement :
+
+```bash
+docker compose exec -e RESTIC_PASSWORD=TAROTBOT_PASSWORD tarotbot \
+  restic -r rclone:gdrive:TarotBot/restic snapshots
+```
+
+### `t/export` et `t/export backup`
+
+- **`t/export`** : envoie une **photo de `data/`** (jeu + saisons archivées) en zip plat, sans secret ni dépôt restic. Sert à emporter l’état courant ou à le passer à `t/restore`.
+- **`t/export backup`** : snapshot + zip du dépôt **local** (`data/restic`), puis copie Drive en arrière-plan (second message). Pour relire l’archive :
+
+```bash
+unzip tarotbot-restic-repo-*.zip -d /tmp/restore-repo
+docker compose run --rm -v /tmp/restore-repo:/repo:ro \
+    -e RESTIC_PASSWORD=TAROTBOT_PASSWORD --entrypoint sh tarotbot -c \
+    'restic -r /repo snapshots && restic -r /repo restore latest --target /tmp/restore'
+```
+
+> Un dump lisible sans zipper le dépôt : `restic -r /data/restic snapshots` / `t/restore IAMSURE backup`.
+
+### Ce que fait une restauration
+
+- Restaure uniquement `players.json`, `history.json` et `players_backup.json` (accepte un zip **plat** de `t/export`, un zip **à dossier racine** d’une ancienne archive Drive, ou un snapshot restic).
+- **Valide avant d'écrire** : JSON parsables et `players.json` == somme des scores de `history.json`. En cas d'incohérence, rien n'est écrit.
+- **Recalcule** `players_backup.json` (rendu par `players.json` moins la dernière partie de `history.json`) : jamais repris de la source, pour qu'un `t/undo` reste cohérent.
+- **Snapshot** les données précédentes dans `data/_pre_restore_<horodatage>/` avant de basculer (écriture atomique), et ne garde que les 10 plus récents.
+- N'écrase **pas** les dossiers de saisons archivées, et n'importe **jamais** un `config.json` provenant d'une ancienne archive (secret).
+
+> Les écritures JSON du bot (`open(..., 'w')` puis `json.dump`) ne sont pas atomiques : une archive prise pile pendant une écriture pourrait contenir un fichier tronqué. Le créneau de 3 h et la conservation des archives récentes (30 jours complets) rendent le risque négligeable ; la veille reste intacte.
+
+---
+
 ## Structure du projet
 
 ```text
@@ -262,18 +390,25 @@ tarobot-imb/
 ├── bot.py                     # point d'entrée : charge config, crée le client, enregistre les commandes
 ├── pyproject.toml             # dépendances (uv)
 ├── uv.lock                    # versions figées
-├── Dockerfile                 # build multi-stage (uv -> venv)
+├── Dockerfile                 # build multi-stage (uv -> venv) + rclone/restic/supercronic
 ├── docker-compose.yml         # run : restart, TZ, logs, montage de data/
 ├── .dockerignore
+├── backup/                    # sauvegarde automatique + copie vers Google Drive
+│   ├── backup.sh              # point d'entrée : python -m tarot_commands.backup_lib
+│   ├── entrypoint.sh          # supercronic en fond, bot au premier plan
+│   └── crontab                # planification (tous les jours à 3 h)
 ├── data/                      # état du bot (hors Git), monté sur /data
+│   ├── restic/                # dépôt restic local (snapshots + rotation)
 │   ├── players.json           # scores cumulés
 │   ├── players_backup.json    # sauvegarde avant la dernière mise à jour
 │   ├── history.json           # historique des parties
 │   └── <AAAA-MM-JJ>/          # saisons archivées (players/history/backup)
-├── .env                       # token Discord (hors Git)
+├── .env                       # token Discord + identifiants rclone/restic (hors Git)
 ├── .env.example               # modèle de .env
 ├── config.json -> data/…      # liens symboliques vers data/ pour le run local
 ├── run_bot.sh                 # lancement simple
+├── run_backup.sh              # déclenche une sauvegarde immédiate (conteneur jetable)
+├── run_restore.sh             # restaure depuis un zip ou un snapshot restic (hors Discord)
 ├── curves.py                  # t/curves (matplotlib -> curves.png)
 ├── season_stitcher.py         # fusion de saisons (hors commande Discord)
 ├── tarot_commands/
@@ -285,6 +420,11 @@ tarobot-imb/
 │   ├── undo.py                # t/undo
 │   ├── new_season.py          # t/new_season
 │   ├── history.py             # écriture de history.json
+│   ├── export.py              # t/export, t/export backup (dépôt restic complet)
+│   ├── export_lib.py          # construction des zips de données (sans discord)
+│   ├── restore.py             # t/restore (restauration avec confirmation)
+│   ├── restore_lib.py         # validation + bascule partagées (sans discord)
+│   ├── backup_lib.py          # restic local + copie Drive + zip (sans discord)
 │   └── help.py                # t/help
 ```
 

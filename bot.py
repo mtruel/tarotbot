@@ -11,6 +11,8 @@ from tarot_commands.rules import poignees, contrats, scores_descendante
 from tarot_commands.undo import undo
 from tarot_commands.new_season import new_season
 from tarot_commands.help import explain_command_error, help, more_info
+from tarot_commands.export import export
+from tarot_commands.restore import restore
 from curves import curves
 from dotenv import load_dotenv
 import os
@@ -67,6 +69,8 @@ bot.add_command(curves)
 bot.add_command(auto)
 bot.add_command(add_players)
 bot.add_command(new_season)
+bot.add_command(export)
+bot.add_command(restore)
 bot.add_command(help)
 
 

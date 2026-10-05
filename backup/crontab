@@ -1,0 +1,4 @@
+# Planification de la sauvegarde TarotBot (supercronic).
+# Format : minute heure jour-du-mois mois jour-de-semaine commande
+# Tous les jours à 3 h du matin (heure locale, TZ=Europe/Paris).
+0 3 * * * /usr/local/bin/backup.sh
