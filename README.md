@@ -47,25 +47,21 @@ uv sync
 uv run bot.py
 ```
 
-Ou au choix, avec `pip` :
-
-```bash
-pip install -r requirements.txt
-```
-
 ### Configuration du token
 
-Les fichiers d’état du bot vivent dans le dossier `data/` (voir [Données](#données)), qui contient notamment `data/config.json` (fichier **hors Git**, cf. [`.gitignore`](.gitignore)) :
+Le token Discord est lu depuis la variable d’environnement `DISCORD_TOKEN`, chargée par le fichier `.env` à la racine du dépôt (fichier **hors Git**, cf. [`.gitignore`](.gitignore)). Un modèle est fourni dans [`.env.example`](.env.example) :
 
-```json
-{
-  "token": "<TOKEN_DISCORD>"
-}
+```bash
+cp .env.example .env
+# puis éditer .env :
+# DISCORD_TOKEN=<TOKEN_DISCORD>
 ```
 
-Le bot lit uniquement la clé `token`. En l’absence de `players.json` ou `history.json`, il crée automatiquement un fichier vide au démarrage.
+Le token doit être **régénéré** dans le portail Discord s’il a pu fuiter.
 
-> Le token présent dans l’archive d’origine a fuité : s’il s’agit du même bot, **régénérer le token** dans le portail Discord avant de lancer.
+> Repli : si `DISCORD_TOKEN` n’est pas défini, le bot retombe sur `data/config.json` (`{"token": "<TOKEN_DISCORD>"}`) pour ne pas casser une installation existante. Cette solution est dépréciée au profit du `.env`.
+
+En l’absence de `players.json` ou `history.json`, le bot crée automatiquement un fichier vide au démarrage.
 
 ### Intents Discord
 
@@ -91,8 +87,8 @@ Points à connaître :
 - Les données sont montées depuis `./data` (bind mount `./data:/data`) ; c’est le répertoire de travail du conteneur, car le bot lit/écrit ses JSON en chemins relatifs.
 - Le conteneur tourne en UID/GID 1000 (`tarot`), donc `data/` doit appartenir à cet utilisateur sur l’hôte.
 - `restart: unless-stopped`, `init: true`, `stop_grace_period: 10s`, `mem_limit: 512m`, logs JSON plafonnés à 3 × 10 Mo, et `TZ=Europe/Paris` pour que `datetime.now()` de `history.py` / `new_season.py` reste à l’heure locale.
-- Aucun secret n’est embarqué dans l’image : le token vit dans `data/config.json`, exclu du contexte de build par [`.dockerignore`](.dockerignore).
-- Un `.env` à la racine est pris en compte s’il existe (`env_file` optionnel), par exemple pour surcharger des variables d’environnement.
+- Aucun secret n’est embarqué dans l’image : le token est fourni au conteneur via la variable `DISCORD_TOKEN` lue depuis le `.env` (cf. [Configuration du token](#configuration-du-token)).
+- Le fichier `.env` à la racine est chargé par `docker compose` (`env_file` optionnel) ; il est exclu du contexte de build par [`.dockerignore`](.dockerignore).
 
 ### En direct (sans Docker)
 
@@ -106,7 +102,7 @@ Ou via le script fourni [`run_bot.sh`](run_bot.sh) :
 sh run_bot.sh
 ```
 
-> Lancé depuis la racine du dépôt, le bot utilise les JSON de `data/` via les liens symboliques `config.json`, `players.json`, `players_backup.json` et `history.json` : les mêmes données que celles du conteneur.
+> Lancé depuis la racine du dépôt, le bot utilise les JSON de `data/` via les liens symboliques `players.json`, `players_backup.json` et `history.json` (et lit le token via le `.env`) : les mêmes données que celles du conteneur.
 
 > `run_bot.sh` n’a pas de shebang valide (la première ligne est `#!` seule) : le lancer avec `sh`, pas `./run_bot.sh`.
 
@@ -222,11 +218,10 @@ Une partie est validée par le bouton **Calcul** de l’interface. Les menus (s�
 
 ## Données
 
-Tous les fichiers d’état vivent dans `data/` depuis la conteneurisation, et sont **exclus de Git** par [`.gitignore`](.gitignore). À la racine du dépôt, `config.json`, `players.json`, `players_backup.json` et `history.json` sont des liens symboliques vers `data/`, pour que le bot lancé à la main trouve les mêmes fichiers que dans le conteneur (`data/` est monté sur `/data`) :
+Tous les fichiers d’état vivent dans `data/` depuis la conteneurisation, et sont **exclus de Git** par [`.gitignore`](.gitignore). À la racine du dépôt, `players.json`, `players_backup.json` et `history.json` sont des liens symboliques vers `data/`, pour que le bot lancé à la main trouve les mêmes fichiers que dans le conteneur (`data/` est monté sur `/data`) :
 
 | Fichier | Contenu |
 |---|---|
-| `config.json` | Token Discord |
 | `players.json` | Scores cumulés par joueur (`{"Alice": 123, ...}`) |
 | `players_backup.json` | Sauvegarde avant la dernière mise à jour (utilisée par `t/undo`) |
 | `history.json` | Liste des parties : `{"time": "JJ/MM/AAAA, HH:MM:SS", "scores": {...}}` |
@@ -271,16 +266,16 @@ tarobot-imb/
 ├── docker-compose.yml         # run : restart, TZ, logs, montage de data/
 ├── .dockerignore
 ├── data/                      # état du bot (hors Git), monté sur /data
-│   ├── config.json            # token Discord
 │   ├── players.json           # scores cumulés
 │   ├── players_backup.json    # sauvegarde avant la dernière mise à jour
 │   ├── history.json           # historique des parties
 │   └── <AAAA-MM-JJ>/          # saisons archivées (players/history/backup)
+├── .env                       # token Discord (hors Git)
+├── .env.example               # modèle de .env
 ├── config.json -> data/…      # liens symboliques vers data/ pour le run local
 ├── run_bot.sh                 # lancement simple
 ├── curves.py                  # t/curves (matplotlib -> curves.png)
 ├── season_stitcher.py         # fusion de saisons (hors commande Discord)
-├── requirements.txt           # conservé pour un `pip install` hors uv
 ├── tarot_commands/
 │   ├── ping.py                # t/ping
 │   ├── add_player.py          # t/add_player, t/add_players

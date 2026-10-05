@@ -12,10 +12,31 @@ from tarot_commands.undo import undo
 from tarot_commands.new_season import new_season
 from tarot_commands.help import explain_command_error, help, more_info
 from curves import curves
+from dotenv import load_dotenv
 import os
 
-with open('config.json', 'r') as f:
-    config = json.load(f)
+load_dotenv()
+
+
+def load_token():
+    """Récupère le token Discord depuis l'environnement, sinon config.json.
+
+    La source recommandée est la variable DISCORD_TOKEN (fichier .env, hors
+    Git). Le config.json reste accepté en repli pour ne pas casser l'existant.
+    """
+    token = os.getenv('DISCORD_TOKEN')
+    if token:
+        return token
+    if os.path.isfile('config.json'):
+        with open('config.json', 'r') as f:
+            return json.load(f)['token']
+    raise SystemExit(
+        'Aucun token Discord : définir DISCORD_TOKEN (fichier .env) '
+        'ou fournir un config.json avec la clé "token".'
+    )
+
+
+token = load_token()
 
 if not os.path.isfile('players.json'):
     with open('players.json', 'w') as f:
@@ -63,4 +84,4 @@ async def on_command_error(ctx, error):
     await ctx.send(message)
 
 
-bot.run(config['token'])
+bot.run(token)

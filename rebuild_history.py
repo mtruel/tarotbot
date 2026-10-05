@@ -25,6 +25,7 @@ A lancer dans le conteneur, dont le repertoire de travail est /data :
 import argparse
 import ast
 import json
+import os
 import re
 import shutil
 import sys
@@ -34,6 +35,11 @@ import urllib.request
 from datetime import datetime
 from pathlib import Path
 from zoneinfo import ZoneInfo
+
+try:
+    from dotenv import load_dotenv
+except ImportError:  # dotenv optionnel : on peut aussi passer DISCORD_TOKEN
+    load_dotenv = None
 
 PARIS = ZoneInfo('Europe/Paris')
 HISTORY_TIME = '%d/%m/%Y, %H:%M:%S'
@@ -384,10 +390,19 @@ def main():
     root = Path.cwd()
     history_path = root / 'history.json'
     config_path = root / 'config.json'
-    if not history_path.is_file() or not config_path.is_file():
-        raise SystemExit(f'{history_path} et {config_path} doivent etre dans le repertoire courant ({root})')
+    if not history_path.is_file():
+        raise SystemExit(f'{history_path} doit etre dans le repertoire courant ({root})')
 
-    token = json.loads(config_path.read_text())['token']
+    if load_dotenv is not None:
+        load_dotenv(root / '.env')
+    token = os.getenv('DISCORD_TOKEN')
+    if not token:
+        if not config_path.is_file():
+            raise SystemExit(
+                'Aucun token Discord : definir DISCORD_TOKEN (fichier .env) '
+                f'ou fournir {config_path}'
+            )
+        token = json.loads(config_path.read_text())['token']
     guild, channel_id, channel_name = find_tarot_channel(token)
     print(f'Salon #{channel_name} sur {guild} ({channel_id})')
     print('Lecture des messages...')
