@@ -287,8 +287,7 @@ class GameCalculButton(discord.ui.View):
                 return
 
         if GLOBAL_BOUTS is None:
-            await interaction.response.send_message('Pas de réponse pour les bouts.')
-            return
+            GLOBAL_BOUTS = 0
 
         if not GLOBAL_ENCHERE:
             await interaction.response.send_message('Pas de réponse pour les enchères.')
@@ -812,10 +811,7 @@ def autoparse(msg):
                f"Misères:    {GLOBAL_MISERES}")
 
     if GLOBAL_BOUTS is None:
-        reparse += (
-            '\n⚠️ Aucun bout (0, 1, 2 ou 3). '
-            'Le bouton Calcul refusera tant qu’ils manquent.'
-        )
+        reparse += '\n⚠️ Aucun bout (0, 1, 2 ou 3).'
 
     return reparse
 
