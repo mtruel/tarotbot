@@ -1,0 +1,311 @@
+"""Tests sans connexion Discord, avec donnees isolees dans un dossier temporaire.
+
+Executer via Docker avec tests/ monte dans /tests (voir README).
+"""
+
+import asyncio
+import json
+import os
+from pathlib import Path
+import tempfile
+import unittest
+from unittest.mock import AsyncMock, patch
+import zipfile
+
+from tarot_commands.state import (
+    check_legacy_scores, compute_scores, known_players, load_history,
+    load_player_names, migrate_state, normalize_player_names, save_history, save_player_names,
+)
+from tarot_commands.restore_lib import RestoreError, read_archive, read_snapshot, restore_archive
+from tarot_commands.export_lib import build_export
+from tarot_commands.history import update_history
+from tarot_commands.undo import undo
+from tarot_commands.add_player import add_player, add_players
+from tarot_commands.new_season import new_season
+from tarot_commands.leaderboard import leaderboard_text, leaderboard2_text
+from tarot_commands import game
+import curves
+
+
+class StateTests(unittest.TestCase):
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.cwd = os.getcwd()
+        os.chdir(self.tmp.name)
+        save_player_names(['Alice', 'Bob', 'Carol', 'SansPartie'])
+        self.games = [
+            {'time': '01/10/2026, 12:00:00', 'scores': {'Alice': 40, 'Bob': -20, 'Carol': -20}},
+            {'time': '01/10/2026, 13:00:00', 'scores': {'Alice': -10, 'Bob': 20, 'Carol': -10}},
+        ]
+        save_history(self.games)
+
+    def tearDown(self):
+        os.chdir(self.cwd)
+        self.tmp.cleanup()
+
+    def archive(self, players=None, history=None, prefix='', include_players=True):
+        path = os.path.join(self.tmp.name, 'archive.zip')
+        with zipfile.ZipFile(path, 'w') as zf:
+            zf.writestr(prefix + 'history.json', json.dumps(self.games if history is None else history))
+            if include_players:
+                zf.writestr(prefix + 'players.json', json.dumps(load_player_names() if players is None else players))
+            zf.writestr(prefix + 'players_backup.json', '{invalid-json')
+            zf.writestr(prefix + 'config.json', '{invalid-json')
+            zf.writestr(prefix + 'Saison1/players.json', '{invalid-json')
+        return path
+
+    def test_totals_and_player_names(self):
+        self.assertEqual(compute_scores(), {'Alice': 30, 'Bob': 0, 'Carol': -30, 'SansPartie': 0})
+        save_player_names(['SansPartie'])
+        self.assertEqual(known_players(), ['SansPartie', 'Alice', 'Bob', 'Carol'])
+        self.assertEqual(normalize_player_names({'Alice': 123}), ['Alice'])
+        self.assertEqual(normalize_player_names(['Alice', 'Alice']), ['Alice'])
+        self.assertIn('SansPartie', leaderboard_text())
+        self.assertIn('SansPartie', leaderboard2_text())
+
+    def test_migration_keeps_scores_names_and_snapshot(self):
+        legacy = compute_scores()
+        Path('players.json').write_text(json.dumps(legacy))
+        Path('players_backup.json').write_text('{}')
+        before = Path('history.json').read_bytes()
+        migrate_state()
+        self.assertIsInstance(json.loads(Path('players.json').read_text()), list)
+        self.assertEqual(compute_scores(), legacy)
+        self.assertEqual(Path('history.json').read_bytes(), before)
+        backups = list(Path('.').glob('_pre_migration_*'))
+        self.assertEqual(len(backups), 1)
+        self.assertEqual(json.loads((backups[0] / 'players.json').read_text()), legacy)
+        migrate_state()
+        self.assertEqual(len(list(Path('.').glob('_pre_migration_*'))), 1)
+
+    def test_migration_refuses_inconsistency_without_changes(self):
+        Path('players.json').write_text('{"Alice":999}')
+        before = Path('players.json').read_bytes()
+        with self.assertRaises(ValueError):
+            migrate_state()
+        self.assertEqual(Path('players.json').read_bytes(), before)
+        self.assertFalse(list(Path('.').glob('_pre_migration_*')))
+
+    def test_fresh_state_and_missing_player_names(self):
+        Path('players.json').unlink()
+        migrate_state()
+        self.assertEqual(load_player_names(), ['Alice', 'Bob', 'Carol'])
+        Path('players.json').unlink()
+        Path('history.json').unlink()
+        migrate_state()
+        self.assertEqual(load_player_names(), [])
+        self.assertEqual(load_history(), [])
+
+    def test_atomic_write_preserves_symlink_and_previous_json_on_error(self):
+        Path('data').mkdir()
+        Path('players.json').rename('data/players.json')
+        Path('players.json').symlink_to('data/players.json')
+        save_player_names(['Nouveau'])
+        self.assertTrue(Path('players.json').is_symlink())
+        self.assertEqual(load_player_names('data/players.json'), ['Nouveau'])
+        before = Path('history.json').read_bytes()
+        with patch('tarot_commands.state.os.replace', side_effect=OSError('test')):
+            with self.assertRaises(OSError):
+                save_history([])
+        self.assertEqual(Path('history.json').read_bytes(), before)
+        self.assertFalse(list(Path('.').glob('*.tmp')))
+
+    def test_atomic_write_keeps_file_mode(self):
+        os.chmod('history.json', 0o644)
+        save_history(self.games)
+        self.assertEqual(os.stat('history.json').st_mode & 0o777, 0o644)
+        os.chmod('history.json', 0o640)
+        save_history(self.games)
+        self.assertEqual(os.stat('history.json').st_mode & 0o777, 0o640)
+        save_player_names(['Nouveau'], 'nouveau.json')
+        self.assertEqual(os.stat('nouveau.json').st_mode & 0o777, 0o644)
+
+    def test_menu_players_respects_discord_limit(self):
+        self.assertEqual(game.menu_players(), ['Alice', 'Bob', 'Carol', 'SansPartie'])
+        player_names = [f'J{i}' for i in range(30)]
+        history = [{'scores': {'J29': 1, 'J0': -1}}]
+        players = game.menu_players(history, player_names)
+        self.assertEqual(len(players), game.MAX_SELECT_OPTIONS)
+        self.assertIn('J29', players)
+        self.assertEqual(players, [p for p in player_names if p in players])
+        save_player_names(player_names)
+        save_history(history)
+        selector = game.SelectPlayers('Preneur', 'x')
+        self.assertEqual(len(selector.options), game.MAX_SELECT_OPTIONS)
+
+    def test_new_season_follows_symlinks(self):
+        Path('data').mkdir()
+        for name in ('players.json', 'history.json'):
+            Path(name).rename(f'data/{name}')
+            Path(name).symlink_to(f'data/{name}')
+        with patch('tarot_commands.new_season.data_dir', return_value='data'):
+            asyncio.run(new_season.callback(AsyncMock(), 'IAMSURE'))
+        archives = [p for p in Path('data').iterdir() if p.is_dir()]
+        self.assertEqual(len(archives), 1)
+        self.assertFalse((archives[0] / 'history.json').is_symlink())
+        self.assertEqual(load_history(archives[0] / 'history.json'), self.games)
+        self.assertEqual(load_history(), [])
+
+    def test_record_add_and_repeated_undo(self):
+        ctx = AsyncMock()
+        asyncio.run(add_player.callback(ctx, 'Nouveau'))
+        asyncio.run(add_player.callback(ctx, 'nouveau'))
+        asyncio.run(add_players.callback(ctx, msg='  Eve   Frank Eve  '))
+        self.assertEqual(load_player_names().count('Nouveau'), 1)
+        self.assertEqual(load_player_names().count('Eve'), 1)
+        self.assertEqual(compute_scores()['Nouveau'], 0)
+        update_history({'Nouveau': 5, 'Alice': -5}, {'type': 'test'})
+        self.assertEqual(compute_scores()['Nouveau'], 5)
+        self.assertFalse(Path('players_backup.json').exists())
+        asyncio.run(undo.callback(ctx))
+        self.assertEqual(len(load_history()), 3)
+        asyncio.run(undo.callback(ctx, 'IAMSURE'))
+        self.assertEqual(compute_scores()['Nouveau'], 0)
+        asyncio.run(undo.callback(ctx, 'IAMSURE'))
+        self.assertEqual(compute_scores()['Alice'], 40)
+        asyncio.run(undo.callback(ctx, 'IAMSURE'))
+        self.assertTrue(all(v == 0 for v in compute_scores().values()))
+        asyncio.run(undo.callback(ctx, 'IAMSURE'))
+        self.assertEqual(load_history(), [])
+        self.assertIn('vide', ctx.send.call_args.args[0])
+
+    def test_game_parsing_menus_and_calculation(self):
+        game.reset_cache()
+        game.autoparse('Alice garde 45 2 vs Bob Carol')
+        scores = game.calcul_scores()
+        update_history(scores, game.partie_details())
+        self.assertEqual(len(load_history()), 3)
+        self.assertEqual(compute_scores()['Alice'], 30 + scores['Alice'])
+        selector = game.SelectPlayers('Preneur', 'x')
+        self.assertIn('SansPartie', [option.label for option in selector.options])
+        game.reset_cache()
+        game.autoparse('descendante Alice 20 Bob 20 Carol 51')
+        scores = game.calcul_score_descendante(game.GLOBAL_DESCENDANTE_PLAYERS, game.GLOBAL_DESCENDANTE_POINTS)
+        update_history(scores, game.descendante_details())
+        self.assertEqual(len(load_history()), 4)
+        game.reset_cache()
+
+    def test_calculation_buttons_record_once_in_history(self):
+        async def exercise():
+            game.reset_cache()
+            game.autoparse('Alice garde 45 2 vs Bob Carol')
+            expected = game.calcul_scores()
+            view = game.GameCalculButton()
+            interaction = AsyncMock()
+            await view.children[0].callback(interaction)
+            self.assertEqual(load_history()[-1]['scores'], expected)
+            self.assertEqual(compute_scores()['Alice'], 30 + expected['Alice'])
+            self.assertTrue(view.children[0].disabled)
+            self.assertEqual(load_player_names(), ['Alice', 'Bob', 'Carol', 'SansPartie'])
+            game.autoparse('descendante Alice 20 Bob 20 Carol 51')
+            view = game.DescendanteCalculButton()
+            await view.children[0].callback(interaction)
+            self.assertEqual(len(load_history()), 4)
+            self.assertTrue(view.children[0].disabled)
+            self.assertFalse(Path('players_backup.json').exists())
+            game.reset_cache()
+        asyncio.run(exercise())
+
+    def test_new_season_archives_legacy_backup_if_present(self):
+        Path('players_backup.json').write_text('{}')
+        asyncio.run(new_season.callback(AsyncMock(), 'IAMSURE'))
+        archives = [p for p in Path('.').iterdir() if p.is_dir()]
+        self.assertTrue((archives[0] / 'players_backup.json').exists())
+        self.assertFalse(Path('players_backup.json').exists())
+        self.assertEqual(load_history(), [])
+
+    def test_new_season_without_backup_and_with_legacy_residue(self):
+        ctx = AsyncMock()
+        asyncio.run(new_season.callback(ctx, 'IAMSURE'))
+        self.assertEqual(load_history(), [])
+        self.assertEqual(load_player_names(), [])
+        archives = [p for p in Path('.').iterdir() if p.is_dir()]
+        self.assertEqual(len(archives), 1)
+        self.assertEqual(load_history(archives[0] / 'history.json'), self.games)
+        # Une seconde demande le meme jour ne doit pas ecraser l'archive.
+        asyncio.run(new_season.callback(ctx, 'IAMSURE'))
+        self.assertEqual(load_history(archives[0] / 'history.json'), self.games)
+
+    def test_old_new_missing_and_nested_restore(self):
+        expected = compute_scores()
+        for prefix in ('', '2026-10-05/'):
+            data = read_archive(self.archive(players=expected, prefix=prefix))
+            self.assertEqual(data['players.json'], load_player_names())
+            self.assertEqual(set(data), {'players.json', 'history.json'})
+        self.assertEqual(read_archive(self.archive())['players.json'], load_player_names())
+        data = read_archive(self.archive(include_players=False))
+        self.assertEqual(data['players.json'], ['Alice', 'Bob', 'Carol'])
+        path = self.archive(players={'Alice': 999})
+        before = Path('history.json').read_bytes()
+        with self.assertRaises(RestoreError):
+            restore_archive(path, self.tmp.name)
+        self.assertEqual(Path('history.json').read_bytes(), before)
+        path = self.archive(players={'Alice': 40, 'Bob': -20, 'Carol': -20, 'Inscrit': 0}, history=self.games[:1])
+        snapshot = restore_archive(path, self.tmp.name)
+        self.assertTrue(Path(snapshot, 'history.json').exists())
+        self.assertEqual(compute_scores()['Inscrit'], 0)
+        self.assertEqual(compute_scores()['Alice'], 40)
+        asyncio.run(undo.callback(AsyncMock(), 'IAMSURE'))
+        self.assertEqual(compute_scores()['Alice'], 0)
+
+    def test_restore_snapshot_legacy_and_current(self):
+        for players in (compute_scores(), load_player_names()):
+            files = {'history.json': json.dumps(self.games).encode(),
+                     'players.json': json.dumps(players).encode()}
+            with patch('tarot_commands.restore_lib.resolve_snapshot', return_value={'id': 'snapshot'}), \
+                    patch('tarot_commands.restore_lib._restic_dump', side_effect=lambda sid, name: files.get(name)):
+                self.assertEqual(read_snapshot()['players.json'], load_player_names())
+
+    def test_invalid_archives(self):
+        for bad in ({}, [{'scores': []}], [{'scores': {'Alice': True}}],
+                    [{'scores': {'Alice': '5'}}], [{'scores': {'Alice': float('nan')}}]):
+            with self.assertRaises(RestoreError):
+                read_archive(self.archive(history=bad))
+        for bad in (None, 'Alice', [3], ['']):
+            if bad is None:
+                continue
+            with self.assertRaises(RestoreError):
+                read_archive(self.archive(players=bad))
+        # Un JSON syntaxiquement incorrect ne doit pas etre accepte.
+        path = self.archive()
+        with zipfile.ZipFile(path, 'w') as zf:
+            zf.writestr('history.json', '{')
+        with self.assertRaises(RestoreError):
+            read_archive(path)
+
+    def test_export_and_curves(self):
+        Path('Saison1').mkdir()
+        save_history(self.games, 'Saison1/history.json')
+        Path('config.json').write_text('{}')
+        Path('_pre_migration_x').mkdir()
+        Path('_pre_migration_x/players.json').write_text('{}')
+        Path('history.backup-20261001-000000.json').write_text('[]')
+        path = build_export(dest_dir=self.tmp.name, src=self.tmp.name)
+        data = read_archive(path)
+        self.assertEqual(data['history.json'], self.games)
+        with zipfile.ZipFile(path) as zf:
+            self.assertIn('Saison1/history.json', zf.namelist())
+            self.assertNotIn('config.json', zf.namelist())
+            self.assertNotIn('players_backup.json', zf.namelist())
+            self.assertFalse([n for n in zf.namelist()
+                              if n.startswith('_pre_') or n.startswith('history.backup-')])
+        curves.render_curves()
+        self.assertTrue(Path('curves.png').is_file())
+        curves.plt.close('all')
+
+    def test_mixed_season_stitcher(self):
+        from season_stitcher import fuse_history_and_players
+        Path('Saison1').mkdir()
+        Path('Saison2').mkdir()
+        save_history(self.games[:1], 'Saison1/history.json')
+        Path('Saison1/players.json').write_text(json.dumps({'Alice': 40, 'Bob': -20, 'Carol': -20}))
+        save_history(self.games[1:], 'Saison2/history.json')
+        save_player_names(['Inscrit'], 'Saison2/players.json')
+        with patch('season_stitcher.ARCHIVES_DIR', self.tmp.name):
+            fuse_history_and_players(['Saison1', 'Saison2'])
+        self.assertEqual(load_history(), self.games)
+        self.assertEqual(compute_scores(), {'Alice': 30, 'Bob': 0, 'Carol': -30, 'Inscrit': 0})
+
+
+if __name__ == '__main__':
+    unittest.main()

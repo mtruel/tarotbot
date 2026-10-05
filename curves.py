@@ -1,17 +1,14 @@
 import matplotlib.pyplot as plt
 import numpy as np
-import json
+from tarot_commands.state import compute_scores, load_history
 from matplotlib import colormaps
 from discord.ext import commands
 import discord
 
 
 def render_curves():
-    with open('history.json', 'r') as f:
-        HISTORY = json.load(f)
-
-    with open('players.json', 'r') as f:
-        PLAYERS = json.load(f)
+    HISTORY = load_history()
+    PLAYERS = compute_scores(HISTORY)
 
     n_players = len(PLAYERS)
     n_games = len(HISTORY)

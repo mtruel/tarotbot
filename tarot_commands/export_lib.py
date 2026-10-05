@@ -20,7 +20,7 @@ def build_export(dest_dir=None, src=None):
     """Construit un zip des donnees du bot et retourne son chemin.
 
     Reprend le perimetre de la sauvegarde restic : les *.json a la racine des
-    donnees (players.json, history.json, players_backup.json...) et tous les
+    donnees (players.json pour les noms, history.json pour les points) et tous les
     dossiers de saisons archivees, recursivement. ``src`` permet de forcer le
     dossier source (defaut : ``data_dir()``).
     """
@@ -36,7 +36,11 @@ def build_export(dest_dir=None, src=None):
             full = os.path.join(src, entry)
             if entry in EXCLUDED_FILES or entry in EXCLUDED_DIRS:
                 continue
-            if entry.startswith('_pre_restore_'):
+            # Copies de securite locales (restauration, migration,
+            # rebuild_history.py) : gardees par restic, inutiles dans l'export.
+            if entry.startswith(('_pre_restore_', '_pre_migration_')):
+                continue
+            if entry.startswith('history.backup-') and entry.endswith('.json'):
                 continue
             if os.path.isdir(full):
                 for root, _dirs, files in os.walk(full):

@@ -1,7 +1,6 @@
 # Secrets et données locales : jamais dans le contexte de build
 config.json
 players.json
-players_backup.json
 history.json
 curves.png
 .env
@@ -18,5 +17,4 @@ tarot_commands/__pycache__/
 # VCS et divers
 .git/
 .gitignore
-files_backup/
 xp.py

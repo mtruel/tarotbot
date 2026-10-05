@@ -1,9 +1,8 @@
 import discord
 from discord.ext import commands
-import json
 from tarot_commands.rules import CONTRAT_PAR_BOUT, PRIMES
 from table2ascii import table2ascii as t2a
-from tarot_commands.leaderboard import update_leaderboard
+from tarot_commands.state import known_players, load_history
 from tarot_commands.history import update_history
 from tarot_commands.help import error_message
 from unidecode import unidecode
@@ -115,13 +114,37 @@ class SelectBouts(discord.ui.Select):
         await interaction.response.send_message(content=f"Choix: {self.values[0]}!", ephemeral=True)
 
 
+# Discord refuse un menu de plus de 25 options (HTTP 400).
+MAX_SELECT_OPTIONS = 25
+
+
+def menu_players(history=None, player_names=None):
+    """Noms proposes dans les menus, limites a MAX_SELECT_OPTIONS.
+
+    Au-dela de la limite, on garde les joueurs ayant joue le plus recemment,
+    puis les inscrits sans partie (ordre de la liste des joueurs). L'ordre d'affichage reste
+    celui de la liste des joueurs. t/auto reconnait toujours tous les joueurs.
+    """
+    if history is None:
+        history = load_history()
+    players = known_players(history, player_names)
+    if len(players) <= MAX_SELECT_OPTIONS:
+        return players
+    recent = {}
+    for entry in reversed(history):
+        for name in entry['scores']:
+            recent.setdefault(name, len(recent))
+    ranked = sorted(players, key=lambda p: recent.get(p, len(players) + players.index(p)))
+    kept = set(ranked[:MAX_SELECT_OPTIONS])
+    return [p for p in players if p in kept]
+
+
 class SelectPlayers(discord.ui.Select):
     def __init__(self, role, emote):
-        with open('players.json', 'r') as f:
-            PLAYERS = json.load(f)
+        PLAYERS = menu_players()
 
         options = [
-            discord.SelectOption(label=player_name) for player_name in PLAYERS.keys()
+            discord.SelectOption(label=player_name) for player_name in PLAYERS
         ]
 
         self.role = role
@@ -301,7 +324,6 @@ class GameCalculButton(discord.ui.View):
                 return
 
         scores = calcul_scores()
-        update_leaderboard(scores)
         update_history(scores, partie_details())
         button.disabled = True  # After updating the score!
         reset_cache()
@@ -336,7 +358,6 @@ class DescendanteCalculButton(discord.ui.View):
 
         scores = calcul_score_descendante(GLOBAL_DESCENDANTE_PLAYERS, GLOBAL_DESCENDANTE_POINTS)
         scores = affecte_miseres(scores)
-        update_leaderboard(scores)
         update_history(scores, descendante_details())
         button.disabled = True  # After updating the score!
         reset_cache()
@@ -593,8 +614,7 @@ def autoparse(msg):
     msg_decode_lower = unidecode(msg).lower()
     msg_decode_lower_list = msg_decode_lower.split(' ')
 
-    with open('players.json', 'r') as f:
-        PLAYERS = json.load(f)
+    PLAYERS = known_players()
     names = player_index(PLAYERS)
 
     preneur_token = msg_list[0]
@@ -824,8 +844,7 @@ def autoparse_desc(msg):
     msg = clean_msg(msg)
     msg_list = msg.split(' ')
 
-    with open('players.json', 'r') as f:
-        PLAYERS = json.load(f)
+    PLAYERS = known_players()
     names = player_index(PLAYERS)
 
     player_idx = 1

@@ -9,13 +9,12 @@ Deux sources possibles :
 - un snapshot restic (commande t/export backup / backup.sh), lu via backup_lib.
 
 Principes :
-- on ne restaure que les trois fichiers d'etat a la RACINE de l'archive ;
+- on restaure history.json et la liste des joueurs players.json a la RACINE de l'archive ;
 - les dossiers de saisons et les fichiers imbriques (dont un eventuel
   config.json avec le token) sont ignores ;
 - aucune ecriture tant que la validation n'a pas reussi ;
 - avant de basculer, un snapshot horodate des donnees actuelles est conserve ;
-- players_backup.json est toujours recalcule (jamais repris de la source), pour
-  qu'un undo ne remette pas les scores d'une saison disparue.
+- les anciennes listes avec scores sont converties ; players_backup.json est ignore.
 """
 
 import json
@@ -32,6 +31,10 @@ from tarot_commands.backup_lib import (
     resolve_snapshot,
 )
 
+from tarot_commands.state import (
+    check_legacy_scores, known_players, normalize_player_names, save_json, validate_history,
+)
+
 # Nombre de dossiers _pre_restore_* conserves (les plus recents).
 MAX_PRE_RESTORE = 10
 
@@ -44,16 +47,11 @@ class RestoreError(Exception):
 
 
 def _check_consistency(players, history):
-    """Verifie que players.json est bien la somme des scores de history.json."""
-    total = {}
-    for game in history:
-        for name, score in game.get('scores', {}).items():
-            total[name] = total.get(name, 0) + score
-    if players != total:
-        raise RestoreError(
-            'Incoherence : players.json ne correspond pas a la somme des '
-            'scores de history.json. Rien n\'a ete restaure.'
-        )
+    """Valide les totaux d'une ancienne archive, inscrits a zero inclus."""
+    try:
+        check_legacy_scores(players, history)
+    except ValueError as exc:
+        raise RestoreError(str(exc)) from exc
 
 
 def _root_prefix(names):
@@ -110,49 +108,33 @@ def read_archive(path):
 
 
 def _validate(root_files):
-    """Valide les fichiers d'etat (JSON + coherence) et retourne {nom: objet}.
-
-    Leve RestoreError si l'archive est inutilisable. Aucune ecriture. Le
-    players_backup.json de la source est ignore : il est toujours recalcule.
-    """
-    if 'players.json' not in root_files:
-        raise RestoreError(
-            'Archive invalide : players.json est absent de la racine.'
-        )
+    """Valide history et la liste des joueurs facultative avant toute ecriture."""
     if 'history.json' not in root_files:
         raise RestoreError(
             'Archive invalide : history.json est absent de la racine.'
         )
 
     data = {}
-    for name, raw in root_files.items():
-        if name == 'players_backup.json':
+    for name in STATE_FILES:
+        if name not in root_files:
             continue
         try:
-            data[name] = json.loads(raw.decode('utf-8'))
-        except (ValueError, UnicodeDecodeError):
+            data[name] = json.loads(root_files[name].decode('utf-8'))
+        except (ValueError, UnicodeDecodeError) as exc:
             raise RestoreError(
                 f'Archive invalide : {name} n\'est pas du JSON valide.'
-            )
+            ) from exc
 
-    _check_consistency(data['players.json'], data['history.json'])
-    data['players_backup.json'] = _expected_backup(
-        data['players.json'], data['history.json']
-    )
+    try:
+        history = validate_history(data['history.json'])
+        raw_players = data.get('players.json', [])
+        player_names = normalize_player_names(raw_players)
+        if isinstance(raw_players, dict):
+            _check_consistency(raw_players, history)
+        data['players.json'] = known_players(history, player_names)
+    except ValueError as exc:
+        raise RestoreError(f'Archive invalide : {exc}') from exc
     return data
-
-
-def _expected_backup(players, history):
-    """Etat attendu de players_backup.json : players moins la derniere partie.
-
-    Meme logique que ``t/undo`` : le backup doit decrire l'etat d'avant la
-    donnee desormais derniere, pour qu'un undo coherent soit possible.
-    """
-    backup = dict(players)
-    if history:
-        for name, score in history[-1].get('scores', {}).items():
-            backup[name] = backup.get(name, 0) - score
-    return backup
 
 
 def _normalize_ref(ref):
@@ -224,12 +206,8 @@ def apply_restore(data, dest_dir):
             shutil.copy2(current, os.path.join(snapshot, name))
 
     for name, content in data.items():
-        target = os.path.join(dest_dir, name)
-        # Ecriture atomique : fichier temporaire puis remplacement.
-        tmp = target + '.tmp'
-        with open(tmp, 'w', encoding='utf-8') as f:
-            json.dump(content, f, indent=4)
-        os.replace(tmp, target)
+        # Ecriture atomique partagee avec le bot (fsync, mode conserve).
+        save_json(os.path.join(dest_dir, name), content)
 
     _cleanup_pre_restore(dest_dir)
     return snapshot

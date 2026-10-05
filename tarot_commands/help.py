@@ -97,7 +97,8 @@ COMMANDS = [
         'undo',
         't/undo IAMSURE',
         'annule la dernière partie',
-        'Retire la dernière partie du classement et de l’historique.\n'
+        'Retire la dernière partie de l’historique ; les points sont recalculés.\n'
+        'Peut être répété tant que l’historique n’est pas vide.\n'
         'Sans IAMSURE, le bot demande confirmation et ne change rien.\n'
         'Irréversible sans accès aux fichiers sur le serveur.',
     ),
@@ -105,7 +106,7 @@ COMMANDS = [
         'new_season',
         't/new_season IAMSURE',
         'archive la saison et repart à zéro',
-        'Déplace players.json, history.json et players_backup.json dans un '
+        'Déplace players.json (noms) et history.json (parties et points) dans un '
         'dossier daté, puis repart sur des fichiers vides.\n'
         'Sans IAMSURE, le bot demande confirmation et ne change rien.\n'
         'Irréversible sans accès aux fichiers sur le serveur.',
@@ -144,7 +145,7 @@ COMMANDS = [
         't/export [backup]',
         'envoie une archive zip des données',
         'Sans argument, construit un zip avec les fichiers d’état '
-        '(`players.json`, `history.json`, `players_backup.json`) et tous les '
+        '(`players.json` pour les noms, `history.json` pour les points) et tous les '
         'dossiers de saisons archivées, puis l’envoie en pièce jointe dans le '
         'salon.\n'
         'Avec `backup`, crée un snapshot restic dans le dépôt **local** '
@@ -158,15 +159,15 @@ COMMANDS = [
         'restore',
         't/restore IAMSURE [backup] (+ archive zip)',
         'restaure les données depuis une archive ou restic (RÉSERVÉ AUX ADMINS)',
-        'Restaure `players.json`, `history.json` et `players_backup.json` depuis '
+        'Restaure `players.json` (noms) et `history.json` (points) depuis '
         'une archive `.zip` en pièce jointe (par exemple celle de `t/export`) '
         'ou, avec `backup`, depuis le dernier snapshot restic.\n'
         'Le bot demande confirmation par message et joint une backup des '
         'données actuelles.\n'
         'Pour confirmer, taper **exactement** `ecraser_saison_en_cours` '
         '(le budget est de 60 s ; une faute de frappe est signalée).\n'
-        '`players_backup.json` est recalculé à partir du `players.json` restauré '
-        '(pour que `t/undo` reste cohérent).\n'
+        'Les scores sont recalculés depuis history.json ; les anciens players.json '
+        'avec scores sont convertis en listes de noms.\n'
         'Les dossiers de saisons archivées ne sont pas modifiés.\n'
         'Commande réservée aux administrateurs du serveur.',
     ),

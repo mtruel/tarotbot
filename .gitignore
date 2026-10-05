@@ -10,12 +10,8 @@ config.json
 data/*
 !data/.gitkeep
 
-# personal backups
-files_backup/
-
-# scores
+# noms et historique de la saison
 players.json
-players_backup.json
 history.json
 curves.png
 

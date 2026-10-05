@@ -3,7 +3,7 @@
 Bot Discord pour compter les points de Tarot entre amis, sur un serveur du homelab.
 
 - Préfixe des commandes : `t/`
-- Scores persistés dans des fichiers JSON, dans `data/` (`players.json`, `history.json`)
+- Points enregistrés uniquement dans `data/history.json` ; `data/players.json` contient les noms des joueurs de la saison
 - Plusieurs parties par saison, mise en forme d’un classement, courbes d’évolution, et saisie semi-automatique en texte libre
 - Image Docker ARM64 (build `uv` multi-stage) + `docker compose` pour le run sur le Pi
 
@@ -39,13 +39,7 @@ Dépendances (déclarées dans [`pyproject.toml`](pyproject.toml), versions fig�
 
 ## Installation
 
-Avec `uv` (recommandé) :
-
-```bash
-uv sync
-# exécution :
-uv run bot.py
-```
+Le bot doit être lancé via Docker (voir [Lancement](#lancement)). `uv` est utilisé pendant le build pour installer les dépendances.
 
 ### Configuration du token
 
@@ -61,7 +55,7 @@ Le token doit être **régénéré** dans le portail Discord s’il a pu fuiter.
 
 > Repli : si `DISCORD_TOKEN` n’est pas défini, le bot retombe sur `data/config.json` (`{"token": "<TOKEN_DISCORD>"}`) pour ne pas casser une installation existante. Cette solution est dépréciée au profit du `.env`.
 
-En l’absence de `players.json` ou `history.json`, le bot crée automatiquement un fichier vide au démarrage.
+En l’absence de `players.json` ou `history.json`, le bot crée une liste vide au démarrage. L’ancien `players.json` (dictionnaire de scores) est converti automatiquement en liste de noms après vérification des totaux et copie des fichiers dans `data/_pre_migration_<horodatage>/`. En cas d’écart avec l’historique, la migration s’arrête sans écraser les données.
 
 ### Intents Discord
 
@@ -90,34 +84,11 @@ Points à connaître :
 - Aucun secret n’est embarqué dans l’image : le token est fourni au conteneur via la variable `DISCORD_TOKEN` lue depuis le `.env` (cf. [Configuration du token](#configuration-du-token)).
 - Le fichier `.env` à la racine est chargé par `docker compose` (`env_file` optionnel) ; il est exclu du contexte de build par [`.dockerignore`](.dockerignore).
 
-### En direct (sans Docker)
+### Exécution et données
 
-```bash
-uv run bot.py
-```
+Ne pas démarrer le bot en direct (`python bot.py`, `uv run bot.py` ou `screen`). Docker le garde actif après fermeture de la session SSH. Les données se consultent directement dans `data/` ; le conteneur les voit sous `/data`.
 
-Ou via le script fourni [`run_bot.sh`](run_bot.sh) :
-
-```bash
-sh run_bot.sh
-```
-
-> Lancé depuis la racine du dépôt, le bot utilise les JSON de `data/` via les liens symboliques `players.json`, `players_backup.json` et `history.json` (et lit le token via le `.env`) : les mêmes données que celles du conteneur.
-
-> `run_bot.sh` n’a pas de shebang valide (la première ligne est `#!` seule) : le lancer avec `sh`, pas `./run_bot.sh`.
-
-### En session détachée (`screen`)
-
-Pour garder le bot actif après fermeture du terminal SSH :
-
-```bash
-screen -S tarotbot
-# dans la session :
-uv run bot.py       # ou: sh run_bot.sh
-# détacher : CTRL+A puis D
-# ré-attacher plus tard :
-screen -r tarotbot
-```
+Si `players.json` ou `history.json` est incohérent au démarrage (ancien format dont les totaux ne correspondent pas à l’historique), le bot s’arrête avec un message explicite sans rien écrire : corriger les fichiers dans `data/` puis relancer.
 
 ---
 
@@ -136,13 +107,13 @@ Toutes les commandes enregistrées dans [`bot.py`](bot.py) :
 | `t/game <points>` | Saisie d’une partie via menus (enchère, bouts, primes, misères) |
 | `t/auto <message>` | Saisie d’une partie en texte libre (voir syntaxe ci-dessous) |
 | `t/descendante <p1> <p2> ...` | Saisie d’une descendante (points par joueur, puis noms via menus) |
-| `t/undo IAMSURE` | Annule la dernière partie (classement + historique) |
+| `t/undo IAMSURE` | Annule la dernière partie (retirée de l’historique, points recalculés) |
 | `t/new_season IAMSURE` | Archive la saison courante dans un dossier daté et repart à zéro |
 | `t/poignees [n]` | Rappel des seuils de poignée selon le nombre de joueurs (défaut `5`) |
 | `t/contrats` | Rappel des points à atteindre selon le nombre de bouts |
 | `t/scores_descendante <n>` | Rappel des scores de descendante pour `n` joueurs |
 | `t/curves` | Génère `curves.png` et l’envoie dans le salon |
-| `t/export` | Envoie un zip des données (scores, historique, saisons archivées) en pièce jointe |
+| `t/export` | Envoie un zip des données (liste des joueurs, historique, saisons archivées ; sans les copies `_pre_*` ni `history.backup-*`) en pièce jointe |
 | `t/export backup` | Snapshot local + zip du dépôt ; copie Drive (ajout seul) ensuite (message quand c’est fini) |
 | `t/restore IAMSURE [backup]` | Restaure depuis un zip joint ou le dernier snapshot restic (admins, confirmation requise) |
 
@@ -217,24 +188,25 @@ Défini dans [`tarot_commands/rules.py`](tarot_commands/rules.py) et [`tarot_com
 
 Une partie est validée par le bouton **Calcul** de l’interface. Les menus (sélecteurs) ont un timeout de 5 min ; le bouton de calcul, 3 min.
 
+Discord limite un menu à 25 choix : au-delà, les menus de joueurs proposent les 25 joueurs ayant joué le plus récemment (puis les inscrits sans partie). `t/auto` reconnaît toujours tous les joueurs.
+
 ---
 
 ## Données
 
-Tous les fichiers d’état vivent dans `data/` depuis la conteneurisation, et sont **exclus de Git** par [`.gitignore`](.gitignore). À la racine du dépôt, `players.json`, `players_backup.json` et `history.json` sont des liens symboliques vers `data/`, pour que le bot lancé à la main trouve les mêmes fichiers que dans le conteneur (`data/` est monté sur `/data`) :
+Tous les fichiers d’état vivent dans `data/` et sont **exclus de Git** par [`.gitignore`](.gitignore). `data/` est monté sur `/data` dans le conteneur, qui en fait son répertoire de travail.
 
-| Fichier | Contenu |
-|---|---|
-| `players.json` | Scores cumulés par joueur (`{"Alice": 123, ...}`) |
-| `players_backup.json` | Sauvegarde avant la dernière mise à jour (utilisée par `t/undo`) |
-| `history.json` | Liste des parties : `{"time": "JJ/MM/AAAA, HH:MM:SS", "scores": {...}}` |
-| `curves.png` | Courbe générée par `t/curves` (à la racine du dossier) |
+- `players.json` : liste des noms inscrits pour la saison, sans points (`["Alice", "Bob"]`).
+- `history.json` : liste des parties avec date, détails et scores (`{"time": "JJ/MM/AAAA, HH:MM:SS", "scores": {...}}`). **Seule source des points** : les classements et courbes additionnent ces scores à la demande.
+- `curves.png` : courbe régénérée par `t/curves`.
+
+Les joueurs inscrits sans partie apparaissent avec 0 point. Les noms présents uniquement dans l’historique sont aussi reconnus. `t/undo IAMSURE` retire la dernière partie ; on peut répéter la commande jusqu’à vider l’historique, sans modifier la liste des joueurs. `players_backup.json` n’est plus utilisé ; les anciennes archives peuvent encore le contenir.
 
 Formats JSON indicatifs :
 
 ```json
 // players.json
-{ "Alice": 120, "Bob": -35 }
+["Alice", "Bob"]
 
 // history.json
 [
@@ -246,15 +218,19 @@ Formats JSON indicatifs :
 
 ## Saisons
 
-- `t/new_season IAMSURE` déplace `players.json`, `history.json` et `players_backup.json` dans un dossier daté `data/AAAA-MM-JJ/`, puis repart sur des fichiers vides.
+- `t/new_season IAMSURE` déplace `players.json` et `history.json` dans un dossier daté `data/AAAA-MM-JJ/`, puis repart avec une liste des joueurs et un historique vides. Un éventuel `players_backup.json` résiduel est archivé par compatibilité.
 - Les dossiers de saison archivés du dépôt sont dans `data/` : `Saison1_2026-01-06/`, `Saison2_2026-03-02/`, `BackupSaison3_2026-03-05AvantTournoiTarot/`, `TournoiTarot05_03_26/`, `2026-05-04/`, `2026-07-24/`, ainsi que `testseason/`.
 - [`season_stitcher.py`](season_stitcher.py) recombine plusieurs saisons (dont le nom contient `saison`) :
 
 ```bash
-uv run season_stitcher.py
+# Arrêter le bot avant de réécrire l’état courant :
+docker compose stop tarotbot
+docker compose run --rm -v "$PWD/season_stitcher.py:/app/season_stitcher.py:ro" \
+  --entrypoint python tarotbot /app/season_stitcher.py
+docker compose up -d
 ```
 
-Le script concatène les `history.json`, additionne les `players.json` de chaque saison (lus depuis `data/`, surchargeable via `TAROTBOT_DATA_DIR`), puis régénère `curves.png` et affiche les deux classements en console. **Il écrit dans `players.json` / `history.json`** : faire une copie de sauvegarde avant.
+Le script concatène les `history.json` et réunit les noms des `players.json` de chaque saison (anciens dictionnaires et nouvelles listes acceptés), puis recalcule les points depuis l’historique, régénère `curves.png` et affiche les deux classements. Les archives sont lues depuis `data/` (`/data` dans Docker), surchargeable via `TAROTBOT_DATA_DIR`. **Il écrit dans `players.json` / `history.json`** : faire une copie de sauvegarde avant.
 
 ---
 
@@ -345,7 +321,7 @@ docker compose exec -e RESTIC_PASSWORD=TAROTBOT_PASSWORD tarotbot \
   restic -r /data/restic snapshots
 docker compose exec -e RESTIC_PASSWORD=TAROTBOT_PASSWORD tarotbot \
   restic -r /data/restic restore latest --target /tmp/restore
-# copier players.json / history.json / players_backup.json depuis
+# copier players.json / history.json depuis
 # /tmp/restore/ vers ./data, puis :
 docker compose up -d
 ```
@@ -373,13 +349,15 @@ docker compose run --rm -v /tmp/restore-repo:/repo:ro \
 
 ### Ce que fait une restauration
 
-- Restaure uniquement `players.json`, `history.json` et `players_backup.json` (accepte un zip **plat** de `t/export`, un zip **à dossier racine** d’une ancienne archive Drive, ou un snapshot restic).
-- **Valide avant d'écrire** : JSON parsables et `players.json` == somme des scores de `history.json`. En cas d'incohérence, rien n'est écrit.
-- **Recalcule** `players_backup.json` (rendu par `players.json` moins la dernière partie de `history.json`) : jamais repris de la source, pour qu'un `t/undo` reste cohérent.
+- Restaure uniquement `history.json` et `players.json` (zip **plat**, zip **à dossier racine** ou snapshot restic). `history.json` est obligatoire ; si la liste des joueurs manque, elle est reconstruite depuis les noms de l’historique.
+- **Valide avant d’écrire** : structure de l’historique, noms et scores numériques finis. Un ancien `players.json` contenant des totaux doit correspondre à la somme des scores (les inscrits à 0 sans partie sont acceptés), puis il est converti en liste de noms. En cas d’incohérence, rien n’est écrit.
+- Ignore `players_backup.json` : les points et les annulations dépendent uniquement de `history.json`.
 - **Snapshot** les données précédentes dans `data/_pre_restore_<horodatage>/` avant de basculer (écriture atomique), et ne garde que les 10 plus récents.
 - N'écrase **pas** les dossiers de saisons archivées, et n'importe **jamais** un `config.json` provenant d'une ancienne archive (secret).
 
-> Les écritures JSON du bot (`open(..., 'w')` puis `json.dump`) ne sont pas atomiques : une archive prise pile pendant une écriture pourrait contenir un fichier tronqué. Le créneau de 3 h et la conservation des archives récentes (30 jours complets) rendent le risque négligeable ; la veille reste intacte.
+> Les écritures de la liste des joueurs et de l’historique sont atomiques : fichier temporaire dans le même dossier, puis remplacement. Une sauvegarde ne lit donc pas un JSON partiellement écrit. La capture des deux fichiers n’est pas une transaction, mais les points ne sont plus dupliqués.
+>
+> `rebuild_history.py` garde une copie ponctuelle `history.backup-*.json` avant d’enrichir l’historique depuis Discord. Le bot ne lit jamais cette copie ; elle reste un filet de sécurité pour cet outil manuel.
 
 ---
 
@@ -399,14 +377,11 @@ tarobot-imb/
 │   └── crontab                # planification (tous les jours à 3 h)
 ├── data/                      # état du bot (hors Git), monté sur /data
 │   ├── restic/                # dépôt restic local (snapshots + rotation)
-│   ├── players.json           # scores cumulés
-│   ├── players_backup.json    # sauvegarde avant la dernière mise à jour
+│   ├── players.json           # noms des joueurs de la saison
 │   ├── history.json           # historique des parties
-│   └── <AAAA-MM-JJ>/          # saisons archivées (players/history/backup)
+│   └── <AAAA-MM-JJ>/          # saisons archivées (noms + historique)
 ├── .env                       # token Discord + identifiants rclone/restic (hors Git)
 ├── .env.example               # modèle de .env
-├── config.json -> data/…      # liens symboliques vers data/ pour le run local
-├── run_bot.sh                 # lancement simple
 ├── run_backup.sh              # déclenche une sauvegarde immédiate (conteneur jetable)
 ├── run_restore.sh             # restaure depuis un zip ou un snapshot restic (hors Discord)
 ├── curves.py                  # t/curves (matplotlib -> curves.png)
@@ -414,7 +389,8 @@ tarobot-imb/
 ├── tarot_commands/
 │   ├── ping.py                # t/ping
 │   ├── add_player.py          # t/add_player, t/add_players
-│   ├── leaderboard.py         # t/leaderboard, t/leaderboard2, mise à jour des scores
+│   ├── leaderboard.py         # t/leaderboard, t/leaderboard2 (points depuis history)
+│   ├── state.py               # liste des joueurs, calcul des totaux, migration et écritures atomiques
 │   ├── game.py                # t/game, t/descendante, t/auto + calcul des scores
 │   ├── rules.py               # constantes (poignées, contrats, primes) + t/poignees/contrats/scores_descendante
 │   ├── undo.py                # t/undo
@@ -429,6 +405,19 @@ tarobot-imb/
 ```
 
 ---
+
+## Tests de l’état et des commandes
+
+Les tests utilisent des dossiers temporaires, des réponses Discord simulées et aucune connexion réseau : les données réelles de `/data` ne sont pas modifiées.
+
+```bash
+docker compose build
+docker compose run --rm -v "$PWD/tests:/tests:ro" \
+  -v "$PWD/season_stitcher.py:/app/season_stitcher.py:ro" \
+  --entrypoint python tarotbot -m unittest discover -s /tests -v
+```
+
+Ils couvrent les totaux, la liste des joueurs, la migration, les écritures atomiques (droits conservés, liens symboliques suivis), les annulations répétées, l’ajout des joueurs, le parsing et les menus, les saisons, les exports et la restauration des anciens et nouveaux formats.
 
 ## Notes et limites
 

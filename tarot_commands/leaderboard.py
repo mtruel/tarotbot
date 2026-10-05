@@ -1,12 +1,11 @@
 from discord.ext import commands  # type: ignore
-import json
+from tarot_commands.state import compute_scores, load_history
 from table2ascii import table2ascii as t2a  # type: ignore
 from math import sqrt
 
 
 def leaderboard_text():
-    with open('players.json', 'r') as f:
-        PLAYERS = json.load(f)
+    PLAYERS = compute_scores()
 
     sorted_players = dict(
         sorted(PLAYERS.items(), key=lambda item: item[1])[::-1])
@@ -23,11 +22,8 @@ def leaderboard_text():
 
 
 def leaderboard2_text():
-    with open('players.json', 'r') as f:
-        PLAYERS = json.load(f)
-
-    with open('history.json', 'r') as f:
-        HISTORY = json.load(f)
+    HISTORY = load_history()
+    PLAYERS = compute_scores(HISTORY)
 
     player_ratios = {p: 0 for p in PLAYERS.keys()}
     player_WL = {p: {'W': 0, 'L': 0} for p in PLAYERS.keys()}
@@ -86,17 +82,3 @@ async def leaderboard2(ctx):
     """
     text = leaderboard2_text()
     await ctx.send(text)
-
-
-def update_leaderboard(scores):
-    with open('players.json', 'r') as f:
-        PLAYERS = json.load(f)
-
-    with open('players_backup.json', 'w') as f:
-        json.dump(PLAYERS, f, indent=4)
-
-    for k, v in scores.items():
-        PLAYERS[k] += v
-
-    with open('players.json', 'w') as f:
-        json.dump(PLAYERS, f, indent=4)

@@ -13,6 +13,7 @@ from tarot_commands.new_season import new_season
 from tarot_commands.help import explain_command_error, help, more_info
 from tarot_commands.export import export
 from tarot_commands.restore import restore
+from tarot_commands.state import migrate_state
 from curves import curves
 from dotenv import load_dotenv
 import os
@@ -40,15 +41,12 @@ def load_token():
 
 token = load_token()
 
-if not os.path.isfile('players.json'):
-    with open('players.json', 'w') as f:
-        json.dump({}, f, indent=4)
-    print('No players.json file, writing a blank one.')
-
-if not os.path.isfile('history.json'):
-    with open('history.json', 'w') as f:
-        json.dump([], f, indent=4)
-    print('No history.json file, writing a blank one.')
+try:
+    migrate_state()
+except ValueError as exc:
+    # Donnees incoherentes : rien n'a ete ecrit. Arret explicite plutot
+    # qu'une trace brute a chaque redemarrage du conteneur.
+    raise SystemExit(f'Etat invalide dans players.json/history.json : {exc}')
 
 intents = discord.Intents.default()
 intents.message_content = True

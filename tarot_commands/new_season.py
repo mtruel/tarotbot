@@ -2,7 +2,7 @@ from discord.ext import commands  # type: ignore
 import os
 from datetime import datetime
 import shutil
-import json
+from tarot_commands.state import save_history, save_player_names
 
 from tarot_commands.paths import data_dir
 from tarot_commands.help import error_message
@@ -32,18 +32,13 @@ async def new_season(ctx, s='no'):
         return
 
     os.makedirs(folder, exist_ok=True)
-    shutil.move('players.json', folder + 'players.json')
-    shutil.move('history.json', folder + 'history.json')
-    shutil.move('players_backup.json', folder + 'players_backup.json')
+    # realpath : deplacer la cible d'un eventuel lien symbolique, pas le lien.
+    # Compatibilite avec une saison encore au format historique.
+    for name in ('players.json', 'history.json', 'players_backup.json'):
+        if os.path.isfile(name):
+            shutil.move(os.path.realpath(name), folder + name)
 
-    if not os.path.isfile('players.json'):
-        with open('players.json', 'w') as f:
-            json.dump({}, f, indent=4)
-        print('No players.json file, writing a blank one.')
-
-    if not os.path.isfile('history.json'):
-        with open('history.json', 'w') as f:
-            json.dump([], f, indent=4)
-        print('No history.json file, writing a blank one.')
+    save_player_names([])
+    save_history([])
 
     await ctx.send('New season started!')

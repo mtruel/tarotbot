@@ -28,7 +28,7 @@ import subprocess
 import tempfile
 import zipfile
 
-STATE_FILES = ('players.json', 'history.json', 'players_backup.json')
+STATE_FILES = ('players.json', 'history.json')
 
 # Jamais sauvegardes ni restaures : secrets, meme presents dans data/ (repli
 # config.json avec le token, .env, etc.). ``curves.png`` est un artefact
@@ -40,7 +40,7 @@ EXCLUDED_FILES = ('config.json', '.env', 'token.json', 'curves.png')
 EXCLUDED_DIRS = ('restic', 'restore')
 
 # Alias historique : les restaurations raisonnent en « fichiers ignores ».
-IGNORED_FILES = EXCLUDED_FILES
+IGNORED_FILES = EXCLUDED_FILES + ('players_backup.json',)
 
 # Depot restic local (dans le volume data/, hors Git).
 DEFAULT_REPOSITORY = '/data/restic'

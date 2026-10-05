@@ -1,16 +1,12 @@
-import json
 from datetime import datetime
+
+from tarot_commands.state import load_history, save_history
 
 
 def update_history(scores, details):
-    with open('history.json', 'r') as f:
-        HISTORY = json.load(f)
-
+    history = load_history()
     next_entry = {'time': datetime.now().strftime("%d/%m/%Y, %H:%M:%S")}
     next_entry.update(details)
     next_entry['scores'] = scores
-
-    HISTORY.append(next_entry)
-
-    with open('history.json', 'w') as f:
-        json.dump(HISTORY, f, indent=4)
+    history.append(next_entry)
+    save_history(history)
