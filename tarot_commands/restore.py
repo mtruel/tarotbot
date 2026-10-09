@@ -6,11 +6,18 @@ import tempfile
 import discord
 from discord.ext import commands
 
+from tarot_commands.confirm import (
+    DEFAULT_TIMEOUT,
+    busy_confirm_message,
+    confirmation_prompt_suffix,
+    end_confirm,
+    try_begin_confirm,
+    wait_message_confirmation,
+)
 from tarot_commands.export_lib import build_export
 from tarot_commands.help import error_message
 from tarot_commands.paths import data_dir
 from tarot_commands.restore_lib import (
-    RESTIC_SOURCES,
     RestoreError,
     apply_restore,
     read_archive,
@@ -19,44 +26,9 @@ from tarot_commands.restore_lib import (
 
 # Mot de confirmation : comparaison exacte, aucune tolerance.
 CONFIRM_TOKEN = 'ecraser_saison_en_cours'
-
-# Budget total (secondes) laisse a l'utilisateur pour confirmer. Ne se recharge
-# pas a chaque faute de frappe.
-CONFIRM_TIMEOUT = 60
+CONFIRM_TIMEOUT = DEFAULT_TIMEOUT
 
 DISCORD_UPLOAD_LIMIT = 8 * 1024 * 1024
-
-
-async def _wait_for_confirmation(ctx):
-    """Attend le mot de confirmation. True si confirme, False si timeout.
-
-    Signale les fautes de frappe sans interrompre l'attente. Le budget est
-    global : on recalcule le temps restant a chaque message.
-    """
-    loop = asyncio.get_event_loop()
-    deadline = loop.time() + CONFIRM_TIMEOUT
-    while True:
-        remaining = deadline - loop.time()
-        if remaining <= 0:
-            return False
-        try:
-            msg = await ctx.bot.wait_for(
-                'message',
-                timeout=remaining,
-                check=lambda m: m.author == ctx.author
-                and m.channel == ctx.channel,
-            )
-        except asyncio.TimeoutError:
-            return False
-
-        if msg.content.strip() == CONFIRM_TOKEN:
-            return True
-
-        await ctx.send(
-            'Ce n\'est pas le bon mot de confirmation (faute de frappe ?). '
-            f'Tape exactement `{CONFIRM_TOKEN}` pour confirmer, '
-            'ou laisse expirer pour annuler.'
-        )
 
 
 @commands.command()
@@ -138,6 +110,17 @@ async def _confirm_and_apply(ctx, validated, work):
         cleanup = True
     else:
         cleanup = False
+
+    author_id = ctx.author.id
+    channel_id = ctx.channel.id
+    if not try_begin_confirm(author_id, channel_id):
+        await ctx.send(busy_confirm_message(
+            't/restore', CONFIRM_TOKEN, timeout=CONFIRM_TIMEOUT,
+        ))
+        if cleanup:
+            shutil.rmtree(work, ignore_errors=True)
+        return
+
     try:
         # Backup des donnees actuelles, joint au message de confirmation.
         current_backup = await asyncio.to_thread(build_export, work)
@@ -147,13 +130,20 @@ async def _confirm_and_apply(ctx, validated, work):
             await ctx.send(
                 'Cette opération est **DESTRUCTIVE**. Êtes-vous sûr ? '
                 'Voici une backup des données actuelles.\n'
-                f'Tapez `{CONFIRM_TOKEN}` pour confirmer '
-                f'(tu as {CONFIRM_TIMEOUT} s).',
+                + confirmation_prompt_suffix(
+                    CONFIRM_TOKEN, timeout=CONFIRM_TIMEOUT,
+                ),
                 file=backup_file,
             )
 
-        if not await _wait_for_confirmation(ctx):
+        outcome = await wait_message_confirmation(
+            ctx, CONFIRM_TOKEN, timeout=CONFIRM_TIMEOUT,
+        )
+        if outcome == 'timeout':
             await ctx.send('Confirmation expirée, rien n\'a été restauré.')
+            return
+        if outcome == 'cancelled':
+            await ctx.send('Annulé, rien n\'a été restauré.')
             return
 
         snapshot = await asyncio.to_thread(apply_restore, validated, data_dir())
@@ -162,5 +152,6 @@ async def _confirm_and_apply(ctx, validated, work):
             f'Sauvegarde des données précédentes : `{os.path.basename(snapshot)}`.'
         )
     finally:
+        end_confirm(author_id, channel_id)
         if cleanup:
             shutil.rmtree(work, ignore_errors=True)

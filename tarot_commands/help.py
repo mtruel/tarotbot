@@ -116,7 +116,7 @@ COMMANDS = [
         'Cible : l’id affiché sous le tableau de scores, ou une réponse au message '
         'de commande / au tableau.\n'
         'Affiche un récapitulatif, puis demande de confirmer en tapant exactement '
-        '`oui supprime` (60 s).\n'
+        '`oui supprime` (ou `non` pour annuler, 60 s).\n'
         'Exemples :\n'
         '`t/delete 1557730091864301699`\n'
         'en réponse : `t/delete`\n'
@@ -193,7 +193,7 @@ COMMANDS = [
         'Le bot demande confirmation par message et joint une backup des '
         'données actuelles.\n'
         'Pour confirmer, taper **exactement** `ecraser_saison_en_cours` '
-        '(le budget est de 60 s ; une faute de frappe est signalée).\n'
+        '(ou `non` pour annuler ; budget 60 s ; une faute de frappe est signalée).\n'
         'Les scores sont recalculés depuis history.json ; les anciens players.json '
         'avec scores sont convertis en listes de noms.\n'
         'Les dossiers de saisons archivées ne sont pas modifiés.\n'
@@ -318,7 +318,7 @@ def _too_many_text(name):
         'export': '`t/export` ou `t/export backup` — aucun autre argument.',
         'delete': (
             'Usage : `t/delete <id>`, ou `t/delete` en réponse au message. '
-            'Confirmer ensuite avec `oui supprime`.'
+            'Confirmer ensuite avec `oui supprime`, ou `non` pour annuler.'
         ),
         'restore': (
             'Usage : `t/restore IAMSURE` avec une archive `.zip` en pièce jointe, '

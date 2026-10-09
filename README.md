@@ -108,7 +108,7 @@ Toutes les commandes enregistrées dans [`bot.py`](bot.py) :
 | `t/auto <message>` | Saisie d’une partie en texte libre (voir syntaxe ci-dessous) |
 | `t/descendante <p1> <p2> ...` | Saisie d’une descendante (points par joueur, puis noms via menus) |
 | `t/edit <id> <auto…>` | Écrase une partie déjà enregistrée (ou en réponse à un message lié) |
-| `t/delete <id>` | Supprime une partie (récap + confirmation `oui supprime` ; ou en réponse) |
+| `t/delete <id>` | Supprime une partie (récap + `oui supprime` / `non` ; ou en réponse) |
 | `t/new_season IAMSURE` | Archive la saison courante dans un dossier daté et repart à zéro |
 | `t/poignees [n]` | Rappel des seuils de poignée selon le nombre de joueurs (défaut `5`) |
 | `t/contrats` | Rappel des points à atteindre selon le nombre de bouts |
@@ -206,7 +206,7 @@ Tous les fichiers d’état vivent dans `data/` et sont **exclus de Git** par [`
 - `history.json` : liste des parties avec date, détails et scores (`{"time": "JJ/MM/AAAA, HH:MM:SS", "scores": {...}}`). **Seule source des points** : les classements et courbes additionnent ces scores à la demande.
 - `curves.png` : courbe régénérée par `t/curves`.
 
-Les joueurs inscrits sans partie apparaissent avec 0 point. Les noms présents uniquement dans l’historique sont aussi reconnus. `t/delete <id>` (ou en réponse) retire une partie après confirmation `oui supprime` ; les totaux sont recalculés, sans modifier la liste des joueurs. `players_backup.json` n’est plus utilisé ; les anciennes archives peuvent encore le contenir.
+Les joueurs inscrits sans partie apparaissent avec 0 point. Les noms présents uniquement dans l’historique sont aussi reconnus. `t/delete <id>` (ou en réponse) retire une partie après confirmation `oui supprime` (`non` pour annuler) ; les totaux sont recalculés, sans modifier la liste des joueurs. `players_backup.json` n’est plus utilisé ; les anciennes archives peuvent encore le contenir.
 
 Formats JSON indicatifs :
 
@@ -308,7 +308,7 @@ t/restore IAMSURE          ← avec une archive .zip en pièce jointe
 t/restore IAMSURE backup   ← depuis le dernier snapshot restic
 ```
 
-Le bot valide la source, répond que l'opération est **destructive**, joint une **backup des données actuelles**, puis demande de taper exactement `ecraser_saison_en_cours` (budget 60 s ; une faute de frappe est signalée puis l'attente reprend). Après confirmation : `Restauration effectuée`.
+Le bot valide la source, répond que l'opération est **destructive**, joint une **backup des données actuelles**, puis demande de taper exactement `ecraser_saison_en_cours` (ou `non` pour annuler ; budget 60 s ; une faute de frappe est signalée puis l'attente reprend). Après confirmation : `Restauration effectuée`.
 
 **2. En ligne de commande — `run_restore.sh`** (quand le bot ne démarre plus)
 
@@ -431,5 +431,5 @@ Ils couvrent les totaux, la liste des joueurs, la migration, les écritures atom
 
 - Le bot ne fonctionne qu’en **commandes à préfixe** `t/` (pas de slash commands). L’aide par défaut de discord.py est désactivée : `t/help` liste les commandes, `t/help <commande>` envoie le détail.
 - L’état est stocké en **globales de module** et les écritures JSON ne sont pas protégées par verrou : une seule instance à la fois, une saisie à la fois. Ne pas faire tourner le conteneur et un `uv run bot.py` en local en même temps, ils écriraient dans les mêmes fichiers de `data/`.
-- `t/delete` (confirmation `oui supprime`), `t/edit` (bouton **Écraser**) et `t/new_season` (`IAMSURE`) sont **irréversibles** sans accès aux fichiers sur le serveur.
+- `t/delete` (confirmation `oui supprime` / `non`), `t/edit` (bouton **Écraser**) et `t/new_season` (`IAMSURE`) sont **irréversibles** sans accès aux fichiers sur le serveur.
 - `tarot_commands/rules.py` contient aussi `DESCENDANTE_SCORES`, utilisé uniquement pour l’affichage `t/scores_descendante` (le calcul réel se fait dans `game.calcul_score_descendante`).

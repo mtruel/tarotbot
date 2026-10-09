@@ -2,10 +2,16 @@
 
 from __future__ import annotations
 
-import asyncio
-
 from discord.ext import commands
 
+from tarot_commands.confirm import (
+    DEFAULT_TIMEOUT,
+    busy_confirm_message,
+    confirmation_prompt_suffix,
+    end_confirm,
+    try_begin_confirm,
+    wait_message_confirmation,
+)
 from tarot_commands.edit import is_snowflake_token
 from tarot_commands.help import error_message
 from tarot_commands.history import delete_history_entry
@@ -13,37 +19,7 @@ from tarot_commands.sessions import find_history_by_message_id
 from tarot_commands.state import load_history
 
 CONFIRM_TOKEN = 'oui supprime'
-CONFIRM_TIMEOUT = 60
-
-# (author_id, channel_id) en attente de confirmation — un seul delete à la fois.
-_pending_delete_keys: set[tuple[int, int]] = set()
-
-
-def reset_pending_deletes():
-    """Vide les confirmations en cours (tests)."""
-    _pending_delete_keys.clear()
-
-
-def is_command_message(content: str) -> bool:
-    """True si le message ressemble a une commande t/... (a ignorer pendant la conf.)."""
-    return (content or '').strip().lower().startswith('t/')
-
-
-def is_confirm_token(content: str) -> bool:
-    return (content or '').strip() == CONFIRM_TOKEN
-
-
-def try_begin_delete_confirm(author_id: int, channel_id: int) -> bool:
-    """Reserve un slot de confirmation. False si un delete est deja en cours."""
-    key = (author_id, channel_id)
-    if key in _pending_delete_keys:
-        return False
-    _pending_delete_keys.add(key)
-    return True
-
-
-def end_delete_confirm(author_id: int, channel_id: int):
-    _pending_delete_keys.discard((author_id, channel_id))
+CONFIRM_TIMEOUT = DEFAULT_TIMEOUT
 
 
 def resolve_delete_target(content: str, reference_message_id: int | None):
@@ -120,49 +96,6 @@ def format_entry_summary(entry: dict) -> str:
     return '\n'.join(lines)
 
 
-def _confirmation_message_check(ctx):
-    """Filtre wait_for : auteur/salon, ignore les commandes t/."""
-    def check(msg):
-        if msg.author != ctx.author or msg.channel != ctx.channel:
-            return False
-        if is_command_message(msg.content):
-            return False
-        return True
-    return check
-
-
-async def _wait_for_confirmation(ctx):
-    """Attend `oui supprime`. True si confirme, False si timeout.
-
-    Les messages `t/...` sont ignores (pas de nag). Les autres messages hors
-    token declenchent un rappel.
-    """
-    loop = asyncio.get_running_loop()
-    deadline = loop.time() + CONFIRM_TIMEOUT
-    check = _confirmation_message_check(ctx)
-    while True:
-        remaining = deadline - loop.time()
-        if remaining <= 0:
-            return False
-        try:
-            msg = await ctx.bot.wait_for(
-                'message',
-                timeout=remaining,
-                check=check,
-            )
-        except asyncio.TimeoutError:
-            return False
-
-        if is_confirm_token(msg.content):
-            return True
-
-        await ctx.send(
-            'Ce n\'est pas le bon mot de confirmation (faute de frappe ?). '
-            f'Tape exactement `{CONFIRM_TOKEN}` pour confirmer, '
-            'ou laisse expirer pour annuler.'
-        )
-
-
 @commands.command(name='delete')
 async def delete(ctx, *, value: str = ''):
     """Supprime une partie de l'historique apres confirmation (IRREVERSIBLE)."""
@@ -190,12 +123,10 @@ async def delete(ctx, *, value: str = ''):
 
     author_id = ctx.author.id
     channel_id = ctx.channel.id
-    if not try_begin_delete_confirm(author_id, channel_id):
-        await ctx.send(
-            'Une confirmation `t/delete` est déjà en cours dans ce salon. '
-            f'Termine-la (`{CONFIRM_TOKEN}`) ou attends qu’elle expire '
-            f'({CONFIRM_TIMEOUT} s).'
-        )
+    if not try_begin_confirm(author_id, channel_id):
+        await ctx.send(busy_confirm_message(
+            't/delete', CONFIRM_TOKEN, timeout=CONFIRM_TIMEOUT,
+        ))
         return
 
     try:
@@ -204,12 +135,19 @@ async def delete(ctx, *, value: str = ''):
         await ctx.send(
             f'Sûr de supprimer la partie `{canonical_id}` ?\n'
             f'{summary}\n'
-            f'Confirme en répondant : `{CONFIRM_TOKEN}` '
-            f'(tu as {CONFIRM_TIMEOUT} s).'
+            + confirmation_prompt_suffix(
+                CONFIRM_TOKEN, timeout=CONFIRM_TIMEOUT,
+            )
         )
 
-        if not await _wait_for_confirmation(ctx):
+        outcome = await wait_message_confirmation(
+            ctx, CONFIRM_TOKEN, timeout=CONFIRM_TIMEOUT,
+        )
+        if outcome == 'timeout':
             await ctx.send('Confirmation expirée, rien n’a été supprimé.')
+            return
+        if outcome == 'cancelled':
+            await ctx.send('Annulé, rien n’a été supprimé.')
             return
 
         removed = delete_history_entry(canonical_id)
@@ -222,4 +160,4 @@ async def delete(ctx, *, value: str = ''):
 
         await ctx.send(f'Partie `{canonical_id}` supprimée.')
     finally:
-        end_delete_confirm(author_id, channel_id)
+        end_confirm(author_id, channel_id)

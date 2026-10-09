@@ -32,14 +32,18 @@ from tarot_commands.edit import (
     resolve_edit_target,
     strip_optional_auto_prefix,
 )
-from tarot_commands.delete import (
-    end_delete_confirm,
-    format_entry_summary,
+from tarot_commands.confirm import (
+    end_confirm,
     is_command_message,
-    is_confirm_token,
-    reset_pending_deletes,
+    matches_any_token,
+    matches_token,
+    reset_pending_confirms,
+    try_begin_confirm,
+)
+from tarot_commands.delete import (
+    CONFIRM_TOKEN as DELETE_CONFIRM_TOKEN,
+    format_entry_summary,
     resolve_delete_target,
-    try_begin_delete_confirm,
 )
 from tarot_commands.add_player import add_player, add_players
 from tarot_commands.new_season import new_season
@@ -53,7 +57,7 @@ class StateTests(unittest.TestCase):
         self.tmp = tempfile.TemporaryDirectory()
         self.cwd = os.getcwd()
         os.chdir(self.tmp.name)
-        reset_pending_deletes()
+        reset_pending_confirms()
         save_player_names(['Alice', 'Bob', 'Carol', 'SansPartie'])
         self.games = [
             {'time': '01/10/2026, 12:00:00', 'scores': {'Alice': 40, 'Bob': -20, 'Carol': -20}},
@@ -281,25 +285,31 @@ class StateTests(unittest.TestCase):
 
         asyncio.run(exercise())
 
-    def test_delete_confirm_helpers(self):
+    def test_message_confirm_helpers(self):
         self.assertTrue(is_command_message('t/leaderboard'))
         self.assertTrue(is_command_message('  T/delete 123'))
         self.assertFalse(is_command_message('oui supprime'))
         self.assertFalse(is_command_message('bonjour'))
-        self.assertTrue(is_confirm_token('oui supprime'))
-        self.assertTrue(is_confirm_token('  oui supprime  '))
-        self.assertFalse(is_confirm_token('Oui Supprime'))
-        self.assertFalse(is_confirm_token('t/delete'))
+        self.assertFalse(is_command_message('non'))
 
-        self.assertTrue(try_begin_delete_confirm(1, 10))
-        self.assertFalse(try_begin_delete_confirm(1, 10))
-        self.assertTrue(try_begin_delete_confirm(1, 11))
-        self.assertTrue(try_begin_delete_confirm(2, 10))
-        end_delete_confirm(1, 10)
-        self.assertTrue(try_begin_delete_confirm(1, 10))
-        reset_pending_deletes()
-        self.assertTrue(try_begin_delete_confirm(1, 10))
-        reset_pending_deletes()
+        self.assertTrue(matches_token('oui supprime', DELETE_CONFIRM_TOKEN))
+        self.assertTrue(matches_token('  oui supprime  ', DELETE_CONFIRM_TOKEN))
+        self.assertFalse(matches_token('Oui Supprime', DELETE_CONFIRM_TOKEN))
+        self.assertFalse(matches_token('t/delete', DELETE_CONFIRM_TOKEN))
+        self.assertTrue(matches_any_token('non', ('non',)))
+        self.assertTrue(matches_any_token('  non  ', ('non', 'annule')))
+        self.assertFalse(matches_any_token('Non', ('non',)))
+        self.assertFalse(matches_any_token('oui', ('non',)))
+
+        self.assertTrue(try_begin_confirm(1, 10))
+        self.assertFalse(try_begin_confirm(1, 10))
+        self.assertTrue(try_begin_confirm(1, 11))
+        self.assertTrue(try_begin_confirm(2, 10))
+        end_confirm(1, 10)
+        self.assertTrue(try_begin_confirm(1, 10))
+        reset_pending_confirms()
+        self.assertTrue(try_begin_confirm(1, 10))
+        reset_pending_confirms()
 
     def test_migration_refuses_inconsistency_without_changes(self):
         Path('players.json').write_text('{"Alice":999}')
