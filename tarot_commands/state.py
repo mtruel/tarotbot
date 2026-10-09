@@ -101,6 +101,21 @@ def known_players(history=None, player_names=None):
     return list(names)
 
 
+def player_index(players):
+    """Index casse ignorée vers l'orthographe enregistrée. Le premier nom gagne en cas de doublon."""
+    index = {}
+    for name in players:
+        index.setdefault(name.casefold(), name)
+    return index
+
+
+def resolve_player(token, players, index):
+    """Retourne le nom du classement, ou None. Une graphie exacte l'emporte sur la casse."""
+    if token in players:
+        return token
+    return index.get(token.casefold())
+
+
 def compute_scores(history=None, player_names=None):
     """Recalcule les totaux, y compris les joueurs inscrits avec zero partie."""
     if history is None:

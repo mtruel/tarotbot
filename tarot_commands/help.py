@@ -50,6 +50,29 @@ COMMANDS = [
         "victoire) et l’écart-type. Aucun argument.",
     ),
     (
+        "history",
+        "t/history [n | a-b | today | yesterday | this week | last week | "
+        "this month | last month | dd/mm | dd/mm/yyyy | dd/mm/yyyy dd/mm/yyyy | <id>] "
+        "[player <nom>]",
+        "dernières parties, une ligne chacune",
+        "Affiche l’historique récent, une partie par ligne, la plus récente en "
+        "haut, avec son id (pour `t/edit` / `t/delete`).\n"
+        "Sans argument : les 10 dernières parties.\n"
+        "`<n>` : les n dernières (1 à 50). `<a>-<b>` : tranche (ex. `25-50`, "
+        "50 parties au plus).\n"
+        "Période en cours : `today`, `this week` (depuis lundi), `this month` "
+        "(depuis le 1er).\n"
+        "Période précédente complète : `yesterday`, `last week` (lundi à "
+        "dimanche derniers), `last month` (mois calendaire précédent).\n"
+        "Dates : `dd/mm` (année en cours, ou précédente si la date est future), "
+        "`dd/mm/yyyy`, ou une plage `dd/mm/yyyy dd/mm/yyyy`.\n"
+        "`player <nom>` filtre sur un joueur (casse ignorée, espaces acceptés) "
+        "et ajoute un sous-total (points, parties, V/L).\n"
+        "Primes : SP/DP/TP (poignées), PAB, CA/CNA/CC ; `def:` = côté défense.\n"
+        "Un id de partie (nombre long) affiche le récapitulatif détaillé.\n"
+        "Si la liste dépasse la limite du message, elle est tronquée avec `...`.",
+    ),
+    (
         "game",
         "t/game <points>",
         "saisie d’une partie via menus",

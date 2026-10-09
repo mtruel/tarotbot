@@ -1,7 +1,6 @@
 from discord.ext import commands
 
-from tarot_commands.game import player_index, resolve_player
-from tarot_commands.state import known_players, save_player_names
+from tarot_commands.state import known_players, player_index, resolve_player, save_player_names
 
 
 @commands.command()

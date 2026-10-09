@@ -12,9 +12,9 @@ from tarot_commands.confirm import (
     try_begin_confirm,
     wait_message_confirmation,
 )
-from tarot_commands.edit import is_snowflake_token
 from tarot_commands.help import error_message
 from tarot_commands.history import delete_history_entry
+from tarot_commands.history_view import format_entry_summary, is_snowflake_token
 from tarot_commands.sessions import find_history_by_message_id
 from tarot_commands.state import load_history
 
@@ -39,64 +39,6 @@ def resolve_delete_target(content: str, reference_message_id: int | None):
         return reference_message_id
 
     return None
-
-
-def _join_names(names):
-    names = [n for n in (names or []) if n]
-    if not names:
-        return "—"
-    return ", ".join(names)
-
-
-def format_entry_summary(entry: dict) -> str:
-    """Recapitulatif lisible d'une entree history (partie ou descendante)."""
-    entry_type = entry.get("type", "partie")
-    lines = []
-
-    if entry_type == "descendante":
-        joueurs = entry.get("joueurs") or []
-        points = entry.get("points") or []
-        pairs = []
-        for i, name in enumerate(joueurs):
-            pts = points[i] if i < len(points) else "?"
-            pairs.append(f"{name} {pts}")
-        lines.append("Descendante : " + (", ".join(pairs) if pairs else "—"))
-    else:
-        preneur = entry.get("preneur") or "?"
-        enchere = entry.get("enchere") or "?"
-        pts = entry.get("points_attaque")
-        pts_txt = f"{pts}pts" if pts is not None else "?pts"
-        bouts = entry.get("bouts")
-        bouts_txt = (
-            f"{bouts} bout" + ("" if bouts == 1 else "s") if bouts is not None else "? bouts"
-        )
-        partenaire = entry.get("partenaire")
-        avec = f" avec {partenaire}" if partenaire else ""
-        lines.append(f"{preneur} {enchere} {pts_txt} {bouts_txt}{avec}")
-        lines.append(f"contre {_join_names(entry.get('defenseurs'))}")
-
-        primes_a = entry.get("primes_attaque") or []
-        primes_d = entry.get("primes_defense") or []
-        primes_bits = []
-        if primes_a:
-            primes_bits.append("attaque : " + ", ".join(primes_a))
-        if primes_d:
-            primes_bits.append("défense : " + ", ".join(primes_d))
-        if primes_bits:
-            lines.append("poignées / primes : " + " · ".join(primes_bits))
-
-    miseres = entry.get("miseres") or []
-    if miseres:
-        lines.append("misères : " + ", ".join(miseres))
-
-    scores = entry.get("scores") or {}
-    if scores:
-        score_bits = [
-            f"{name} {int(val) if val == int(val) else val}" for name, val in scores.items()
-        ]
-        lines.append("scores : " + ", ".join(score_bits))
-
-    return "\n".join(lines)
 
 
 @commands.command(name="delete")

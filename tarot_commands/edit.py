@@ -20,6 +20,7 @@ from tarot_commands.game import (
 )
 from tarot_commands.help import error_message
 from tarot_commands.history import replace_history_entry
+from tarot_commands.history_view import is_snowflake_token
 from tarot_commands.sessions import (
     create_session,
     find_history_by_message_id,
@@ -28,10 +29,6 @@ from tarot_commands.sessions import (
     temp_session,
 )
 from tarot_commands.state import load_history
-
-
-def is_snowflake_token(token: str) -> bool:
-    return token.isdigit() and 17 <= len(token) <= 20
 
 
 def strip_optional_auto_prefix(body: str) -> str:

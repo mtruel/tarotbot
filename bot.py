@@ -21,6 +21,7 @@ from tarot_commands.game import (
     handle_auto_edit,
 )
 from tarot_commands.help import error_message, explain_command_error, help, more_info
+from tarot_commands.history import history
 from tarot_commands.leaderboard import leaderboard, leaderboard2
 from tarot_commands.new_season import new_season
 from tarot_commands.ping import ping
@@ -68,6 +69,7 @@ bot.add_command(ping)
 bot.add_command(add_player)
 bot.add_command(leaderboard)
 bot.add_command(leaderboard2)
+bot.add_command(history)
 bot.add_command(delete)
 bot.add_command(edit)
 bot.add_command(undo)

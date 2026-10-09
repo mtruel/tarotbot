@@ -18,7 +18,7 @@ from tarot_commands.sessions import (
     semantic_from_session,
     temp_session,
 )
-from tarot_commands.state import known_players, load_history
+from tarot_commands.state import known_players, load_history, player_index, resolve_player
 
 # Re-exports pour les tests
 __all__ = [
@@ -754,21 +754,6 @@ def clean_msg(msg):
         .replace("'", "")
         .replace('"', "")
     )
-
-
-def player_index(players):
-    """Index casse ignorée vers l’orthographe enregistrée. Le premier nom gagne en cas de doublon."""
-    index = {}
-    for name in players:
-        index.setdefault(name.casefold(), name)
-    return index
-
-
-def resolve_player(token, players, index):
-    """Retourne le nom du classement, ou None. Une graphie exacte l’emporte sur la casse."""
-    if token in players:
-        return token
-    return index.get(token.casefold())
 
 
 def autoparse(msg, session: GameSession):

@@ -9,6 +9,7 @@ import os
 import tempfile
 import unittest
 import zipfile
+from datetime import datetime
 from pathlib import Path
 from unittest.mock import AsyncMock, patch
 
@@ -27,7 +28,6 @@ from tarot_commands.delete import (
     CONFIRM_TOKEN as DELETE_CONFIRM_TOKEN,
 )
 from tarot_commands.delete import (
-    format_entry_summary,
     resolve_delete_target,
 )
 from tarot_commands.edit import (
@@ -40,8 +40,19 @@ from tarot_commands.export_lib import build_export
 from tarot_commands.history import (
     append_related_message_id,
     delete_history_entry,
+    history_text,
     replace_history_entry,
     update_history,
+)
+from tarot_commands.history_view import (
+    empty_message,
+    format_entry_summary,
+    format_history_line,
+    parse_history_args,
+    player_subtotal,
+    render_history,
+    select_history,
+    win_loss,
 )
 from tarot_commands.leaderboard import leaderboard2_text, leaderboard_text
 from tarot_commands.new_season import new_season
@@ -722,6 +733,241 @@ class StateTests(unittest.TestCase):
             fuse_history_and_players(["Saison1", "Saison2"])
         self.assertEqual(load_history(), self.games)
         self.assertEqual(compute_scores(), {"Alice": 30, "Bob": 0, "Carol": -30, "Inscrit": 0})
+
+    def test_history_line_format_partie_descendante(self):
+        partie = {
+            "time": "09/10/2026, 13:57:57",
+            "message_id": 1558086099644190754,
+            "type": "partie",
+            "enchere": "GardeSans",
+            "multiplicateur": 4,
+            "preneur": "Valentine",
+            "partenaire": "Gabriele",
+            "defenseurs": ["Raphaël", "Adam", "Emmanuelle"],
+            "bouts": 2,
+            "points_attaque": 77,
+            "primes_attaque": ["Double Poignée"],
+            "primes_defense": [],
+            "miseres": [],
+            "scores": {"Valentine": 616, "Gabriele": -308},
+        }
+        line = format_history_line(partie)
+        self.assertTrue(line.startswith("09/10 13:57"))
+        self.assertIn("Valentine GardeSans 77pts 2b +Gabriele DP", line)
+        self.assertIn("Valentine+616 Gabriele-308", line)
+        self.assertIn("`1558086099644190754`", line)
+
+        sans_partenaire = dict(partie, partenaire=None, primes_attaque=[])
+        line = format_history_line(sans_partenaire)
+        self.assertNotIn("+Gabriele", line)
+        self.assertNotIn("DP", line)
+
+        rebuilt = dict(partie, preneur=None, enchere=None, bouts=None, partenaire=None)
+        self.assertIn("(contrat inconnu) 77pts DP", format_history_line(rebuilt))
+
+        defense = dict(partie, primes_defense=["Simple Poignée", "Petit au bout"])
+        self.assertIn("+Gabriele DP def:SP def:PAB", format_history_line(defense))
+
+        descendante = {
+            "time": "09/10/2026, 13:51:23",
+            "message_id": 1558084441132245045,
+            "type": "descendante",
+            "joueurs": ["Alice", "Bob", "Carol"],
+            "points": [20, 20, 51],
+            "scores": {"Alice": 90, "Bob": 30, "Carol": -120},
+        }
+        line = format_history_line(descendante)
+        self.assertIn("Descendante  Alice 20, Bob 20, Carol 51", line)
+        self.assertIn("Alice+90 Bob+30 Carol-120", line)
+
+    def test_history_win_loss_and_subtotal(self):
+        entries = [
+            {"scores": {"Alice": 40, "Bob": -20}},
+            {"scores": {"Alice": 0, "Bob": 0}},
+            {"scores": {"Alice": -10, "Bob": 20}},
+        ]
+        self.assertEqual(win_loss(entries, "Alice"), (2, 1))
+        self.assertEqual(win_loss(entries, "Bob"), (2, 1))
+        self.assertEqual(win_loss(entries, "Inconnu"), (0, 0))
+        self.assertEqual(
+            player_subtotal(entries, "Alice"),
+            "Total Alice : +30 pts · 3 parties · 2V / 1L",
+        )
+
+    def test_history_parse_and_select(self):
+        now = datetime(2026, 10, 9, 16, 0, 0)
+        players = ["Alice", "Bob", "Carol", "Mathias"]
+
+        query = parse_history_args("", players, now)
+        self.assertEqual((query.mode, query.n), ("count", 10))
+        capped = parse_history_args("75", players, now)
+        self.assertEqual((capped.n, capped.note), (50, "limité à 50"))
+        self.assertEqual(parse_history_args("25-50", players, now).start, 25)
+        big_range = parse_history_args("1-1000", players, now)
+        self.assertEqual((big_range.start, big_range.end, big_range.note), (1, 50, "limité à 50"))
+
+        def bounds(arg):
+            q = parse_history_args(arg, players, now)
+            return q.since.date(), q.until.date()
+
+        d = datetime(2026, 1, 1).date().replace
+        # now = vendredi 09/10/2026
+        self.assertEqual(bounds("today"), (d(month=10, day=9), d(month=10, day=9)))
+        self.assertEqual(bounds("yesterday"), (d(month=10, day=8), d(month=10, day=8)))
+        self.assertEqual(bounds("this week"), (d(month=10, day=5), d(month=10, day=9)))
+        self.assertEqual(bounds("THIS  Week"), (d(month=10, day=5), d(month=10, day=9)))
+        self.assertEqual(bounds("last week"), (d(month=9, day=28), d(month=10, day=4)))
+        self.assertEqual(bounds("this month"), (d(month=10, day=1), d(month=10, day=9)))
+        self.assertEqual(bounds("last month"), (d(month=9, day=1), d(month=9, day=30)))
+        self.assertIn("semaine dernière", parse_history_args("last week", players, now).label)
+        january = datetime(2026, 1, 15, 10, 0, 0)
+        last_dec = parse_history_args("last month", players, january)
+        self.assertEqual(
+            (last_dec.since.date().isoformat(), last_dec.until.date().isoformat()),
+            ("2025-12-01", "2025-12-31"),
+        )
+
+        self.assertEqual(bounds("09/10"), (d(month=10, day=9), d(month=10, day=9)))
+        # dd/mm future -> annee precedente
+        self.assertEqual(parse_history_args("28/12", players, now).since.year, 2025)
+        self.assertEqual(parse_history_args("09/10/2026", players, now).until.year, 2026)
+        span = parse_history_args("01/10/2026 09/10/2026", players, now)
+        self.assertEqual((span.since.day, span.until.day), (1, 9))
+        with self.assertRaises(ValueError):
+            parse_history_args("31/02", players, now)
+
+        self.assertEqual(parse_history_args("player mathias", players, now).player, "Mathias")
+        self.assertEqual(parse_history_args("player MATHIAS 5", players, now).player, "Mathias")
+        self.assertEqual(parse_history_args("20 player Mathias", players, now).n, 20)
+        week_player = parse_history_args("this week player alice", players, now)
+        self.assertEqual((week_player.mode, week_player.player), ("window", "Alice"))
+        spaced = parse_history_args("player jean pierre 5", [*players, "Jean Pierre"], now)
+        self.assertEqual((spaced.player, spaced.n), ("Jean Pierre", 5))
+
+        with self.assertRaises(ValueError):
+            parse_history_args("player", players, now)
+        with self.assertRaises(ValueError):
+            parse_history_args("player inconnu", players, now)
+        with self.assertRaises(ValueError):
+            parse_history_args("50-25", players, now)
+        with self.assertRaises(ValueError):
+            parse_history_args("0", players, now)
+        with self.assertRaises(ValueError):
+            parse_history_args("blabla", players, now)
+        detail = parse_history_args("1558086099644190754", players, now)
+        self.assertEqual(detail.mode, "detail")
+        with self.assertRaises(ValueError):
+            parse_history_args("player Mathias 1558086099644190754", players, now)
+
+        history = [
+            {"time": "01/10/2026, 12:00:00", "scores": {"Alice": 10, "Bob": -10}},
+            {"time": "05/10/2026, 12:00:00", "scores": {"Alice": -5, "Bob": 5}},
+            {"time": "09/10/2026, 12:00:00", "scores": {"Carol": 5, "Bob": -5}},
+        ]
+        entries, header = select_history(parse_history_args("2", players, now), history)
+        self.assertEqual(len(entries), 2)
+        self.assertEqual(entries[0]["time"], "09/10/2026, 12:00:00")
+        self.assertIn("2 dernières parties", header)
+
+        entries, header = select_history(parse_history_args("2-3", players, now), history)
+        self.assertEqual(
+            [e["time"] for e in entries], ["05/10/2026, 12:00:00", "01/10/2026, 12:00:00"]
+        )
+        self.assertIn("parties 2 à 3 (sur 3)", header)
+
+        query = parse_history_args("5-10", players, now)
+        entries, header = select_history(query, history)
+        self.assertEqual(entries, [])
+        self.assertIn("parties 5 à 10 (sur 3)", header)
+        self.assertEqual(empty_message(query), "Aucune partie pour cette tranche.")
+
+        query = parse_history_args("player alice today", players, now)
+        entries, header = select_history(query, history)
+        self.assertEqual(entries, [])
+        self.assertIn("Alice", header)
+        self.assertEqual(empty_message(query), "Aucune partie de Alice sur cette période.")
+
+        entries, _ = select_history(parse_history_args("player alice 5", players, now), history)
+        self.assertEqual(len(entries), 2)
+
+        entries, header = select_history(parse_history_args("this week", players, now), history)
+        # lundi 05/10 inclus dans "this week"
+        self.assertEqual(
+            [e["time"] for e in entries], ["09/10/2026, 12:00:00", "05/10/2026, 12:00:00"]
+        )
+        entries, _ = select_history(parse_history_args("last week", players, now), history)
+        self.assertEqual([e["time"] for e in entries], ["01/10/2026, 12:00:00"])
+        entries, _ = select_history(parse_history_args("this month", players, now), history)
+        self.assertEqual(len(entries), 3)
+
+    def test_history_render_and_text(self):
+        entries = [
+            {
+                "time": f"01/10/2026, 12:{i:02d}:00",
+                "scores": {"Alice": i},
+                "message_id": 1_000_000_000_000_000_000 + i,
+            }
+            for i in range(40)
+        ]
+        body, hidden = render_history(entries[:3])
+        self.assertEqual(hidden, 0)
+        self.assertEqual(body.count("\n"), 4)
+
+        body, hidden = render_history(entries, max_len=400)
+        self.assertGreater(hidden, 0)
+        self.assertIn("\n...\n", body)
+        self.assertLessEqual(len(body), 400)
+
+        save_history(entries[:2])
+        text = history_text("player Alice", now=datetime(2026, 10, 9, 16, 0, 0))
+        self.assertIn("Total Alice", text)
+
+        detail_id = str(entries[1]["message_id"])
+        self.assertTrue(detail_id.isdigit() and len(detail_id) >= 17)
+        detail = history_text(detail_id, history=entries[:2])
+        self.assertIn(f"Partie `{detail_id}`", detail)
+
+        with self.assertRaises(ValueError):
+            history_text("player inconnu", history=entries[:2])
+
+    def test_history_text_fits_discord_limit(self):
+        names = ["Héloïse", "BaptisteB", "Valentine", "Emmanuelle", "Gabriele"]
+        entries = [
+            {
+                "time": f"0{1 + i % 9}/10/2026, 12:{i:02d}:00",
+                "type": "partie",
+                "preneur": names[i % 5],
+                "enchere": "GardeContre",
+                "partenaire": names[(i + 1) % 5],
+                "bouts": 2,
+                "points_attaque": 52,
+                "primes_attaque": ["Double Poignée"],
+                "primes_defense": ["Simple Poignée"],
+                "scores": {name: -216 if j else 432 for j, name in enumerate(names)},
+                "message_id": 1_558_083_552_535_511_181 + i,
+            }
+            for i in range(60)
+        ]
+        now = datetime(2026, 10, 9, 16, 0, 0)
+        for arg in ("50", "1-50", "this month", "player Héloïse 50", "player gabriele 1-50"):
+            text = history_text(arg, history=entries, now=now)
+            self.assertLessEqual(len(text), 2000, arg)
+            self.assertIn("tronqué", text, arg)
+        self.assertIn("Total Héloïse", history_text("player Héloïse 50", history=entries, now=now))
+
+        # Lignes pathologiques : la limite tient toujours.
+        huge = [{"time": "01/10/2026, 12:00:00", "scores": {"A" * 3000: 1}}] * 3
+        body, hidden = render_history(huge, max_len=500)
+        self.assertLessEqual(len(body), 500)
+        self.assertEqual((hidden, body.count("…")), (0, 3))
+        body, hidden = render_history(huge * 10, max_len=500)
+        self.assertLessEqual(len(body), 500)
+        self.assertGreater(hidden, 0)
+        body, hidden = render_history(huge[:1], max_len=500)
+        self.assertLessEqual(len(body), 500)
+        self.assertEqual(hidden, 0)
+        text = history_text("player " + "A" * 3000, history=huge, now=now)
+        self.assertLessEqual(len(text), 2000)
 
 
 if __name__ == "__main__":
