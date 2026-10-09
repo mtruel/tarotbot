@@ -8,6 +8,8 @@ from discord.ext import commands
 from tarot_commands.game import (
     EXPIRED_MSG,
     ParseError,
+    _bind_calcul_view,
+    _expire_calcul_view,
     autoparse,
     confirm_message_content,
     descendante_details,
@@ -127,11 +129,13 @@ class EditOverwriteButton(discord.ui.View):
     def __init__(self, request_message_id, *, timeout=180):
         super().__init__(timeout=timeout)
         self.request_message_id = request_message_id
+        self.view_generation = 0
+        session = get_session(request_message_id)
+        if session is not None:
+            _bind_calcul_view(session, self)
 
     async def on_timeout(self):
-        session = get_session(self.request_message_id)
-        if session is not None:
-            pop_session(self.request_message_id)
+        await _expire_calcul_view(self)
 
     @discord.ui.button(label='Écraser', style=discord.ButtonStyle.danger)
     async def ecraser(self, interaction: discord.Interaction, button: discord.ui.Button):

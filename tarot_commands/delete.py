@@ -15,6 +15,36 @@ from tarot_commands.state import load_history
 CONFIRM_TOKEN = 'oui supprime'
 CONFIRM_TIMEOUT = 60
 
+# (author_id, channel_id) en attente de confirmation — un seul delete à la fois.
+_pending_delete_keys: set[tuple[int, int]] = set()
+
+
+def reset_pending_deletes():
+    """Vide les confirmations en cours (tests)."""
+    _pending_delete_keys.clear()
+
+
+def is_command_message(content: str) -> bool:
+    """True si le message ressemble a une commande t/... (a ignorer pendant la conf.)."""
+    return (content or '').strip().lower().startswith('t/')
+
+
+def is_confirm_token(content: str) -> bool:
+    return (content or '').strip() == CONFIRM_TOKEN
+
+
+def try_begin_delete_confirm(author_id: int, channel_id: int) -> bool:
+    """Reserve un slot de confirmation. False si un delete est deja en cours."""
+    key = (author_id, channel_id)
+    if key in _pending_delete_keys:
+        return False
+    _pending_delete_keys.add(key)
+    return True
+
+
+def end_delete_confirm(author_id: int, channel_id: int):
+    _pending_delete_keys.discard((author_id, channel_id))
+
 
 def resolve_delete_target(content: str, reference_message_id: int | None):
     """Resout l'id cible, ou None si usage invalide.
@@ -90,10 +120,26 @@ def format_entry_summary(entry: dict) -> str:
     return '\n'.join(lines)
 
 
+def _confirmation_message_check(ctx):
+    """Filtre wait_for : auteur/salon, ignore les commandes t/."""
+    def check(msg):
+        if msg.author != ctx.author or msg.channel != ctx.channel:
+            return False
+        if is_command_message(msg.content):
+            return False
+        return True
+    return check
+
+
 async def _wait_for_confirmation(ctx):
-    """Attend `oui supprime`. True si confirme, False si timeout."""
-    loop = asyncio.get_event_loop()
+    """Attend `oui supprime`. True si confirme, False si timeout.
+
+    Les messages `t/...` sont ignores (pas de nag). Les autres messages hors
+    token declenchent un rappel.
+    """
+    loop = asyncio.get_running_loop()
     deadline = loop.time() + CONFIRM_TIMEOUT
+    check = _confirmation_message_check(ctx)
     while True:
         remaining = deadline - loop.time()
         if remaining <= 0:
@@ -102,13 +148,12 @@ async def _wait_for_confirmation(ctx):
             msg = await ctx.bot.wait_for(
                 'message',
                 timeout=remaining,
-                check=lambda m: m.author == ctx.author
-                and m.channel == ctx.channel,
+                check=check,
             )
         except asyncio.TimeoutError:
             return False
 
-        if msg.content.strip() == CONFIRM_TOKEN:
+        if is_confirm_token(msg.content):
             return True
 
         await ctx.send(
@@ -143,25 +188,38 @@ async def delete(ctx, *, value: str = ''):
         ))
         return
 
-    canonical_id = entry.get('message_id', target_id)
-    summary = format_entry_summary(entry)
-    await ctx.send(
-        f'Sûr de supprimer la partie `{canonical_id}` ?\n'
-        f'{summary}\n'
-        f'Confirme en répondant : `{CONFIRM_TOKEN}` '
-        f'(tu as {CONFIRM_TIMEOUT} s).'
-    )
-
-    if not await _wait_for_confirmation(ctx):
-        await ctx.send('Confirmation expirée, rien n’a été supprimé.')
+    author_id = ctx.author.id
+    channel_id = ctx.channel.id
+    if not try_begin_delete_confirm(author_id, channel_id):
+        await ctx.send(
+            'Une confirmation `t/delete` est déjà en cours dans ce salon. '
+            f'Termine-la (`{CONFIRM_TOKEN}`) ou attends qu’elle expire '
+            f'({CONFIRM_TIMEOUT} s).'
+        )
         return
 
-    removed = delete_history_entry(canonical_id)
-    if removed is None:
-        await ctx.send(error_message(
-            'delete',
-            f'Aucune partie avec l’id `{canonical_id}` (peut-être déjà supprimée).',
-        ))
-        return
+    try:
+        canonical_id = entry.get('message_id', target_id)
+        summary = format_entry_summary(entry)
+        await ctx.send(
+            f'Sûr de supprimer la partie `{canonical_id}` ?\n'
+            f'{summary}\n'
+            f'Confirme en répondant : `{CONFIRM_TOKEN}` '
+            f'(tu as {CONFIRM_TIMEOUT} s).'
+        )
 
-    await ctx.send(f'Partie `{canonical_id}` supprimée.')
+        if not await _wait_for_confirmation(ctx):
+            await ctx.send('Confirmation expirée, rien n’a été supprimé.')
+            return
+
+        removed = delete_history_entry(canonical_id)
+        if removed is None:
+            await ctx.send(error_message(
+                'delete',
+                f'Aucune partie avec l’id `{canonical_id}` (peut-être déjà supprimée).',
+            ))
+            return
+
+        await ctx.send(f'Partie `{canonical_id}` supprimée.')
+    finally:
+        end_delete_confirm(author_id, channel_id)

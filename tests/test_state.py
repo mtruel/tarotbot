@@ -27,13 +27,19 @@ from tarot_commands.history import (
 )
 from tarot_commands.sessions import find_history_by_message_id
 from tarot_commands.edit import (
+    EditOverwriteButton,
     handle_edit_message_edit,
     resolve_edit_target,
     strip_optional_auto_prefix,
 )
 from tarot_commands.delete import (
+    end_delete_confirm,
     format_entry_summary,
+    is_command_message,
+    is_confirm_token,
+    reset_pending_deletes,
     resolve_delete_target,
+    try_begin_delete_confirm,
 )
 from tarot_commands.add_player import add_player, add_players
 from tarot_commands.new_season import new_season
@@ -47,6 +53,7 @@ class StateTests(unittest.TestCase):
         self.tmp = tempfile.TemporaryDirectory()
         self.cwd = os.getcwd()
         os.chdir(self.tmp.name)
+        reset_pending_deletes()
         save_player_names(['Alice', 'Bob', 'Carol', 'SansPartie'])
         self.games = [
             {'time': '01/10/2026, 12:00:00', 'scores': {'Alice': 40, 'Bob': -20, 'Carol': -20}},
@@ -250,6 +257,49 @@ class StateTests(unittest.TestCase):
         )
         self.assertEqual(action, 'ignore')
         game.reset_cache()
+
+    def test_edit_overwrite_timeout_respects_view_generation(self):
+        """Une ancienne View Écraser ne doit pas pop_session après un re-bind."""
+        async def exercise():
+            game.reset_cache()
+            session = game.create_session(500, author_id=42, source='edit')
+            view1 = EditOverwriteButton(500)
+            gen1 = view1.view_generation
+            self.assertEqual(session.view_generation, gen1)
+            self.assertGreater(gen1, 0)
+
+            view2 = EditOverwriteButton(500)
+            self.assertNotEqual(view1.view_generation, view2.view_generation)
+            self.assertEqual(session.view_generation, view2.view_generation)
+
+            await view1.on_timeout()
+            self.assertIsNotNone(game.get_session(500))
+
+            await view2.on_timeout()
+            self.assertIsNone(game.get_session(500))
+            game.reset_cache()
+
+        asyncio.run(exercise())
+
+    def test_delete_confirm_helpers(self):
+        self.assertTrue(is_command_message('t/leaderboard'))
+        self.assertTrue(is_command_message('  T/delete 123'))
+        self.assertFalse(is_command_message('oui supprime'))
+        self.assertFalse(is_command_message('bonjour'))
+        self.assertTrue(is_confirm_token('oui supprime'))
+        self.assertTrue(is_confirm_token('  oui supprime  '))
+        self.assertFalse(is_confirm_token('Oui Supprime'))
+        self.assertFalse(is_confirm_token('t/delete'))
+
+        self.assertTrue(try_begin_delete_confirm(1, 10))
+        self.assertFalse(try_begin_delete_confirm(1, 10))
+        self.assertTrue(try_begin_delete_confirm(1, 11))
+        self.assertTrue(try_begin_delete_confirm(2, 10))
+        end_delete_confirm(1, 10)
+        self.assertTrue(try_begin_delete_confirm(1, 10))
+        reset_pending_deletes()
+        self.assertTrue(try_begin_delete_confirm(1, 10))
+        reset_pending_deletes()
 
     def test_migration_refuses_inconsistency_without_changes(self):
         Path('players.json').write_text('{"Alice":999}')
