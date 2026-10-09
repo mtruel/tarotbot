@@ -157,6 +157,8 @@ t/scores_descendante 4
 
 Le parseur ([`game.autoparse`](tarot_commands/game.py)) accepte une phrase, puis affiche un récapitulatif à valider avec le bouton **Calcul**.
 
+Édition du message `t/auto` : tant que **Calcul** n’a pas été cliqué, modifier le message met à jour le récapitulatif si le parse change. Une fois la partie enregistrée, une édition du même message est ignorée (avertissement dans le salon) — utiliser `t/undo IAMSURE` puis ressaisir si besoin. Plusieurs `t/auto` peuvent être ouverts en parallèle.
+
 Syntaxe imposée :
 
 - **Attaque `vs` Défense**, le premier mot doit être un joueur existant (le preneur) :

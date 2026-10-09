@@ -130,7 +130,7 @@ class StateTests(unittest.TestCase):
         self.assertEqual(players, [p for p in player_names if p in players])
         save_player_names(player_names)
         save_history(history)
-        selector = game.SelectPlayers('Preneur', 'x')
+        selector = game.SelectPlayers('Preneur', 'x', 0)
         self.assertEqual(len(selector.options), game.MAX_SELECT_OPTIONS)
 
     def test_new_season_follows_symlinks(self):
@@ -171,40 +171,100 @@ class StateTests(unittest.TestCase):
 
     def test_game_parsing_menus_and_calculation(self):
         game.reset_cache()
-        game.autoparse('Alice garde 45 2 vs Bob Carol')
-        scores = game.calcul_scores()
-        update_history(scores, game.partie_details())
+        session = game.create_session(1, source='auto')
+        game.autoparse('Alice garde 45 2 vs Bob Carol', session)
+        scores = game.calcul_scores(session)
+        update_history(scores, game.partie_details(session))
         self.assertEqual(len(load_history()), 3)
         self.assertEqual(compute_scores()['Alice'], 30 + scores['Alice'])
-        selector = game.SelectPlayers('Preneur', 'x')
+        selector = game.SelectPlayers('Preneur', 'x', 1)
         self.assertIn('SansPartie', [option.label for option in selector.options])
         game.reset_cache()
-        game.autoparse('descendante Alice 20 Bob 20 Carol 51')
-        scores = game.calcul_score_descendante(game.GLOBAL_DESCENDANTE_PLAYERS, game.GLOBAL_DESCENDANTE_POINTS)
-        update_history(scores, game.descendante_details())
+        session = game.create_session(2, source='auto')
+        game.autoparse('descendante Alice 20 Bob 20 Carol 51', session)
+        scores = game.calcul_score_descendante(
+            session.descendante_players, session.descendante_points,
+        )
+        update_history(scores, game.descendante_details(session))
         self.assertEqual(len(load_history()), 4)
         game.reset_cache()
 
     def test_calculation_buttons_record_once_in_history(self):
         async def exercise():
             game.reset_cache()
-            game.autoparse('Alice garde 45 2 vs Bob Carol')
-            expected = game.calcul_scores()
-            view = game.GameCalculButton()
+            session = game.create_session(10, source='auto')
+            game.autoparse('Alice garde 45 2 vs Bob Carol', session)
+            expected = game.calcul_scores(session)
+            view = game.GameCalculButton(10)
             interaction = AsyncMock()
             await view.children[0].callback(interaction)
             self.assertEqual(load_history()[-1]['scores'], expected)
             self.assertEqual(compute_scores()['Alice'], 30 + expected['Alice'])
             self.assertTrue(view.children[0].disabled)
             self.assertEqual(load_player_names(), ['Alice', 'Bob', 'Carol', 'SansPartie'])
-            game.autoparse('descendante Alice 20 Bob 20 Carol 51')
-            view = game.DescendanteCalculButton()
+            session = game.create_session(11, source='auto')
+            game.autoparse('descendante Alice 20 Bob 20 Carol 51', session)
+            view = game.DescendanteCalculButton(11)
             await view.children[0].callback(interaction)
             self.assertEqual(len(load_history()), 4)
             self.assertTrue(view.children[0].disabled)
             self.assertFalse(Path('players_backup.json').exists())
             game.reset_cache()
         asyncio.run(exercise())
+
+    def test_parallel_sessions_do_not_mix(self):
+        game.reset_cache()
+        s1 = game.create_session(100, author_id=1, source='auto')
+        s2 = game.create_session(200, author_id=2, source='auto')
+        game.autoparse('Alice garde 45 2 vs Bob Carol', s1)
+        game.autoparse('Bob petite 56 3 vs Alice Carol', s2)
+        self.assertEqual(s1.game_players['Preneur'], ['Alice'])
+        self.assertEqual(s2.game_players['Preneur'], ['Bob'])
+        self.assertEqual(s1.points_attaque, 45)
+        self.assertEqual(s2.points_attaque, 56)
+        self.assertIs(game.get_session(100), s1)
+        self.assertIs(game.get_session(200), s2)
+        game.reset_cache()
+
+    def test_handle_auto_edit_pending_and_history(self):
+        game.reset_cache()
+        session = game.create_session(300, author_id=42, source='auto')
+        game.autoparse('Alice garde 45 2 vs Bob Carol', session)
+        session.confirm_message_id = 999
+        old_reparse = session.reparse
+
+        action, payload = game.handle_auto_edit(
+            300, 't/auto Alice garde 45 2 vs Bob Carol', 42,
+        )
+        self.assertEqual(action, 'noop')
+        self.assertEqual(session.reparse, old_reparse)
+
+        action, payload = game.handle_auto_edit(
+            300, 't/auto Alice garde 50 2 vs Bob Carol', 42,
+        )
+        self.assertEqual(action, 'updated')
+        self.assertEqual(payload.points_attaque, 50)
+        self.assertNotEqual(payload.reparse, old_reparse)
+
+        action, payload = game.handle_auto_edit(
+            300, 't/auto Alice garde 50 2 vs Bob Carol', 99,
+        )
+        self.assertEqual(action, 'ignore')
+
+        scores = game.calcul_scores(session)
+        update_history(scores, game.partie_details(session))
+        game.pop_session(300)
+
+        action, payload = game.handle_auto_edit(
+            300, 't/auto Alice garde 60 1 vs Bob Carol', 42,
+        )
+        self.assertEqual(action, 'warn')
+
+        action, payload = game.handle_auto_edit(
+            300, 't/auto Alice garde 50 2 vs Bob Carol', 42,
+        )
+        self.assertEqual(action, 'noop')
+        game.reset_cache()
 
     def test_new_season_archives_legacy_backup_if_present(self):
         Path('players_backup.json').write_text('{}')

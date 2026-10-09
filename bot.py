@@ -6,11 +6,19 @@ import json
 from tarot_commands.ping import ping
 from tarot_commands.add_player import add_player, add_players
 from tarot_commands.leaderboard import leaderboard, leaderboard2
-from tarot_commands.game import game, descendante, auto
+from tarot_commands.game import (
+    game,
+    descendante,
+    auto,
+    handle_auto_edit,
+    confirm_message_content,
+    GameCalculButton,
+    DescendanteCalculButton,
+)
 from tarot_commands.rules import poignees, contrats, scores_descendante
 from tarot_commands.undo import undo
 from tarot_commands.new_season import new_season
-from tarot_commands.help import explain_command_error, help, more_info
+from tarot_commands.help import explain_command_error, help, more_info, error_message
 from tarot_commands.export import export
 from tarot_commands.restore import restore
 from tarot_commands.state import migrate_state
@@ -84,6 +92,43 @@ async def on_command_error(ctx, error):
             f'{more_info(name)}'
         )
     await ctx.send(message)
+
+
+@bot.event
+async def on_message_edit(before, after):
+    """Re-parse t/auto si la saisie est encore pending ; avertit si deja enregistree."""
+    if after.author.bot:
+        return
+    if before.content == after.content:
+        return
+
+    action, payload = handle_auto_edit(after.id, after.content, after.author.id)
+
+    if action == 'updated':
+        session = payload
+        content = confirm_message_content(session)
+        if session.kind == 'descendante' or session.reparse.startswith('Descendante:\n'):
+            view = DescendanteCalculButton(session.request_message_id)
+        else:
+            view = GameCalculButton(session.request_message_id)
+        if session.confirm_message_id and after.channel:
+            try:
+                confirm = await after.channel.fetch_message(session.confirm_message_id)
+                await confirm.edit(content=content, view=view)
+            except discord.HTTPException:
+                await after.channel.send(content, view=view)
+        return
+
+    if action == 'error':
+        await after.channel.send(error_message('auto', payload))
+        return
+
+    if action == 'warn':
+        await after.channel.send(
+            f'L’édition de la partie {after.id} n’est pas prise en compte : '
+            'elle est déjà enregistrée. Pour annuler la dernière partie : '
+            '`t/undo IAMSURE`, puis ressaisis avec `t/auto`.'
+        )
 
 
 bot.run(token)

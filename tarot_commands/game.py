@@ -5,75 +5,87 @@ from table2ascii import table2ascii as t2a
 from tarot_commands.state import known_players, load_history
 from tarot_commands.history import update_history
 from tarot_commands.help import error_message
+from tarot_commands.sessions import (
+    GameSession,
+    clear_all_sessions,
+    create_session,
+    find_history_by_message_id,
+    get_session,
+    pop_session,
+    semantic_from_history,
+    semantic_from_session,
+    temp_session,
+)
+
+# Re-exports pour les tests
+__all__ = [
+    'ParseError',
+    'GameSession',
+    'create_session',
+    'get_session',
+    'pop_session',
+    'reset_cache',
+    'autoparse',
+    'handle_auto_edit',
+]
 from unidecode import unidecode
-from collections import OrderedDict
 
 
 class ParseError(Exception):
     pass
 
 
-GLOBAL_ENCHERE = None
-GLOBAL_GAME_PLAYERS = {'Preneur': [], 'Partenaire': [], 'Défenseurs': []}
-GLOBAL_BOUTS = None
-GLOBAL_PRIMES_ATTAQUE = []
-GLOBAL_PRIMES_DEFENSE = []
-GLOBAL_POINTS_ATTAQUE = None
-GLOBAL_DESCENDANTE_PLAYERS = {'#1': None, '#2': None, '#3': None, '#4': None, '#5': None}
-GLOBAL_DESCENDANTE_POINTS = []
-GLOBAL_MISERES = []
-GLOBAL_REQUEST_MESSAGE_ID = None
-
 ENCHERE_NAMES = {1: 'Petite', 2: 'Garde', 4: 'GardeSans', 6: 'GardeContre'}
+
+EXPIRED_MSG = 'Saisie expirée ou introuvable. Relance la commande.'
 
 
 def reset_cache():
-    global GLOBAL_ENCHERE, GLOBAL_GAME_PLAYERS, GLOBAL_BOUTS, GLOBAL_PRIMES_ATTAQUE, GLOBAL_PRIMES_DEFENSE, \
-        GLOBAL_POINTS_ATTAQUE, GLOBAL_DESCENDANTE_PLAYERS, GLOBAL_MISERES, GLOBAL_DESCENDANTE_POINTS, \
-        GLOBAL_REQUEST_MESSAGE_ID
-    GLOBAL_ENCHERE = None
-    GLOBAL_GAME_PLAYERS = {'Preneur': [], 'Partenaire': [], 'Défenseurs': []}
-    GLOBAL_BOUTS = None
-    GLOBAL_PRIMES_ATTAQUE = []
-    GLOBAL_PRIMES_DEFENSE = []
-    GLOBAL_POINTS_ATTAQUE = None
-    GLOBAL_DESCENDANTE_PLAYERS = {'#1': None, '#2': None, '#3': None, '#4': None, '#5': None}
-    GLOBAL_DESCENDANTE_POINTS = []
-    GLOBAL_MISERES = []
-    GLOBAL_REQUEST_MESSAGE_ID = None
+    """Vide toutes les sessions pending (tests / nettoyage)."""
+    clear_all_sessions()
 
 
-def partie_details():
-    partenaire = GLOBAL_GAME_PLAYERS['Partenaire']
+def partie_details(session: GameSession):
+    partenaire = session.game_players['Partenaire']
     return {
-        'message_id': GLOBAL_REQUEST_MESSAGE_ID,
+        'message_id': session.request_message_id,
         'type': 'partie',
-        'enchere': ENCHERE_NAMES.get(GLOBAL_ENCHERE, GLOBAL_ENCHERE),
-        'multiplicateur': GLOBAL_ENCHERE,
-        'preneur': GLOBAL_GAME_PLAYERS['Preneur'][0],
+        'enchere': ENCHERE_NAMES.get(session.enchere, session.enchere),
+        'multiplicateur': session.enchere,
+        'preneur': session.game_players['Preneur'][0],
         'partenaire': partenaire[0] if partenaire else None,
-        'defenseurs': list(GLOBAL_GAME_PLAYERS['Défenseurs']),
-        'bouts': GLOBAL_BOUTS,
-        'points_attaque': GLOBAL_POINTS_ATTAQUE,
-        'primes_attaque': list(GLOBAL_PRIMES_ATTAQUE),
-        'primes_defense': list(GLOBAL_PRIMES_DEFENSE),
-        'miseres': list(GLOBAL_MISERES),
+        'defenseurs': list(session.game_players['Défenseurs']),
+        'bouts': session.bouts,
+        'points_attaque': session.points_attaque,
+        'primes_attaque': list(session.primes_attaque),
+        'primes_defense': list(session.primes_defense),
+        'miseres': list(session.miseres),
     }
 
 
-def descendante_details():
-    joueurs = [p for p in GLOBAL_DESCENDANTE_PLAYERS.values() if p]
+def descendante_details(session: GameSession):
+    joueurs = [p for p in session.descendante_players.values() if p]
     return {
-        'message_id': GLOBAL_REQUEST_MESSAGE_ID,
+        'message_id': session.request_message_id,
         'type': 'descendante',
         'joueurs': joueurs,
-        'points': list(GLOBAL_DESCENDANTE_POINTS),
-        'miseres': list(GLOBAL_MISERES),
+        'points': list(session.descendante_points),
+        'miseres': list(session.miseres),
     }
+
+
+def confirm_message_content(session: GameSession) -> str:
+    if session.kind == 'descendante' or session.reparse.startswith('Descendante:\n'):
+        return (
+            f"Somme des points = {sum(session.descendante_points)}."
+            f"**Is this parse correct?:**\n{session.reparse}"
+        )
+    return f"**Is this parse correct?:**\n{session.reparse}"
 
 
 class SelectEnchere(discord.ui.Select):
-    def __init__(self):
+    def __init__(self, request_message_id):
+        self.request_message_id = request_message_id
         options = [
             discord.SelectOption(label="Petite", emoji="🤏"),
             discord.SelectOption(label="Garde", emoji="✋"),
@@ -83,23 +95,24 @@ class SelectEnchere(discord.ui.Select):
         super().__init__(placeholder="👋 Enchère:", max_values=1, min_values=1, options=options)
 
     async def callback(self, interaction: discord.Interaction):
-        global GLOBAL_ENCHERE
+        session = get_session(self.request_message_id)
+        if session is None:
+            await interaction.response.send_message(EXPIRED_MSG, ephemeral=True)
+            return
         if self.values[0] == "Petite":
-            GLOBAL_ENCHERE = 1
-            await interaction.response.send_message(content=f"Choix: {self.values[0]}!", ephemeral=True)
+            session.enchere = 1
         elif self.values[0] == "Garde":
-            GLOBAL_ENCHERE = 2
-            await interaction.response.send_message(content=f"Choix: {self.values[0]}!", ephemeral=True)
+            session.enchere = 2
         elif self.values[0] == "GardeSans":
-            GLOBAL_ENCHERE = 4
-            await interaction.response.send_message(content=f"Choix: {self.values[0]}!", ephemeral=True)
+            session.enchere = 4
         elif self.values[0] == "GardeContre":
-            GLOBAL_ENCHERE = 6
-            await interaction.response.send_message(content=f"Choix: {self.values[0]}!", ephemeral=True)
+            session.enchere = 6
+        await interaction.response.send_message(content=f"Choix: {self.values[0]}!", ephemeral=True)
 
 
 class SelectBouts(discord.ui.Select):
-    def __init__(self):
+    def __init__(self, request_message_id):
+        self.request_message_id = request_message_id
         options = [
             discord.SelectOption(label="0"),
             discord.SelectOption(label="1"),
@@ -109,8 +122,11 @@ class SelectBouts(discord.ui.Select):
         super().__init__(placeholder="🧶 Bouts:", max_values=1, min_values=1, options=options)
 
     async def callback(self, interaction: discord.Interaction):
-        global GLOBAL_BOUTS
-        GLOBAL_BOUTS = int(self.values[0])
+        session = get_session(self.request_message_id)
+        if session is None:
+            await interaction.response.send_message(EXPIRED_MSG, ephemeral=True)
+            return
+        session.bouts = int(self.values[0])
         await interaction.response.send_message(content=f"Choix: {self.values[0]}!", ephemeral=True)
 
 
@@ -140,7 +156,8 @@ def menu_players(history=None, player_names=None):
 
 
 class SelectPlayers(discord.ui.Select):
-    def __init__(self, role, emote):
+    def __init__(self, role, emote, request_message_id):
+        self.request_message_id = request_message_id
         PLAYERS = menu_players()
 
         options = [
@@ -170,21 +187,25 @@ class SelectPlayers(discord.ui.Select):
                          max_values=max_values, min_values=min_values, options=options)
 
     async def callback(self, interaction: discord.Interaction):
-        global GLOBAL_DESCENDANTE_PLAYERS, GLOBAL_GAME_PLAYERS, GLOBAL_MISERES
+        session = get_session(self.request_message_id)
+        if session is None:
+            await interaction.response.send_message(EXPIRED_MSG, ephemeral=True)
+            return
         if self.values:
             if '#' in self.role:  # Descendante
-                GLOBAL_DESCENDANTE_PLAYERS[self.role] = self.values[0]
+                session.descendante_players[self.role] = self.values[0]
                 await interaction.response.send_message(content=f"Choix: {str(self.values[0])}!", ephemeral=True)
             elif self.role != 'Misères':
-                GLOBAL_GAME_PLAYERS[self.role] = self.values
+                session.game_players[self.role] = self.values
                 await interaction.response.send_message(content=f"Choix: {str(self.values)}!", ephemeral=True)
             else:  # Misère
-                GLOBAL_MISERES = self.values
+                session.miseres = self.values
                 await interaction.response.send_message(content=f"Choix: {str(self.values)}!", ephemeral=True)
 
 
 class SelectPrimes(discord.ui.Select):
-    def __init__(self, attaque=True):
+    def __init__(self, request_message_id, attaque=True):
+        self.request_message_id = request_message_id
         self.attaque = attaque
         self.defense = not attaque
         emote = '⚔' if self.attaque else '🛡️'
@@ -204,85 +225,115 @@ class SelectPrimes(discord.ui.Select):
                          max_values=3, min_values=0, options=options)
 
     async def callback(self, interaction: discord.Interaction):
-        global GLOBAL_PRIMES_ATTAQUE, GLOBAL_PRIMES_DEFENSE
+        session = get_session(self.request_message_id)
+        if session is None:
+            await interaction.response.send_message(EXPIRED_MSG, ephemeral=True)
+            return
         if self.attaque:
-            GLOBAL_PRIMES_ATTAQUE = self.values
-            await interaction.response.send_message(content=f"Choix: {str(self.values)}!", ephemeral=True)
+            session.primes_attaque = self.values
         else:
-            GLOBAL_PRIMES_DEFENSE = self.values
-            await interaction.response.send_message(content=f"Choix: {str(self.values)}!", ephemeral=True)
+            session.primes_defense = self.values
+        await interaction.response.send_message(content=f"Choix: {str(self.values)}!", ephemeral=True)
+
+
+def _bind_calcul_view(session: GameSession, view: discord.ui.View) -> discord.ui.View:
+    """Associe la View Calcul a la session ; les timeouts des anciennes Views sont ignores."""
+    session.view_generation += 1
+    view.request_message_id = session.request_message_id
+    view.view_generation = session.view_generation
+    return view
+
+
+async def _expire_calcul_view(view: discord.ui.View):
+    session = get_session(getattr(view, 'request_message_id', None))
+    if session is None:
+        return
+    if getattr(view, 'view_generation', None) == session.view_generation:
+        pop_session(session.request_message_id)
 
 
 class SelectViewGame(discord.ui.View):
-    def __init__(self, *, timeout=300):
+    def __init__(self, request_message_id, *, timeout=300):
         super().__init__(timeout=timeout)
-        self.add_item(SelectPlayers('Preneur', '⚔️'))
-        self.add_item(SelectPlayers('Partenaire', '🗡️️'))
-        self.add_item(SelectPlayers('Défenseurs', '🛡️'))
-        self.add_item(SelectEnchere())
-        self.add_item(SelectBouts())
+        self.request_message_id = request_message_id
+        self.add_item(SelectPlayers('Preneur', '⚔️', request_message_id))
+        self.add_item(SelectPlayers('Partenaire', '🗡️️', request_message_id))
+        self.add_item(SelectPlayers('Défenseurs', '🛡️', request_message_id))
+        self.add_item(SelectEnchere(request_message_id))
+        self.add_item(SelectBouts(request_message_id))
 
 
 class SelectViewDescendante(discord.ui.View):
-    def __init__(self, *, timeout=300):
+    def __init__(self, request_message_id, n_players, *, timeout=300):
         super().__init__(timeout=timeout)
-        global GLOBAL_DESCENDANTE_POINTS
-        n_players = len(GLOBAL_DESCENDANTE_POINTS)
+        self.request_message_id = request_message_id
         for i in range(n_players):
-            self.add_item(SelectPlayers('#{}'.format(i + 1), '☂️️'))
+            self.add_item(SelectPlayers('#{}'.format(i + 1), '☂️️', request_message_id))
 
 
 class SelectViewPrimes(discord.ui.View):
-    def __init__(self, *, timeout=300):
+    def __init__(self, request_message_id, *, timeout=300):
         super().__init__(timeout=timeout)
-        self.add_item(SelectPrimes(attaque=True))
-        self.add_item(SelectPrimes(attaque=False))
-        self.add_item(SelectPlayers('Misères', '😇️'))
+        self.request_message_id = request_message_id
+        self.add_item(SelectPrimes(request_message_id, attaque=True))
+        self.add_item(SelectPrimes(request_message_id, attaque=False))
+        self.add_item(SelectPlayers('Misères', '😇️', request_message_id))
 
 
 class GameCalculButton(discord.ui.View):
-    def __init__(self, *, timeout=180):
+    def __init__(self, request_message_id, *, timeout=180):
         super().__init__(timeout=timeout)
+        self.request_message_id = request_message_id
+        self.view_generation = 0
+        session = get_session(request_message_id)
+        if session is not None:
+            _bind_calcul_view(session, self)
+
+    async def on_timeout(self):
+        await _expire_calcul_view(self)
 
     @discord.ui.button(label='Calcul', style=discord.ButtonStyle.blurple)
     async def calcul(self, interaction: discord.Interaction, button: discord.ui.Button):
-        global GLOBAL_ENCHERE, GLOBAL_GAME_PLAYERS, GLOBAL_BOUTS, GLOBAL_PRIMES_ATTAQUE, GLOBAL_PRIMES_DEFENSE, \
-            GLOBAL_MISERES
+        session = get_session(self.request_message_id)
+        if session is None:
+            await interaction.response.send_message(EXPIRED_MSG)
+            return
 
-        if not GLOBAL_GAME_PLAYERS['Preneur']:
+        if not session.game_players['Preneur']:
             await interaction.response.send_message('Preneur?')
             return
 
-        if len(GLOBAL_GAME_PLAYERS['Défenseurs']) < 2:
+        if len(session.game_players['Défenseurs']) < 2:
             await interaction.response.send_message('Pas assez de défenseurs.')
             return
 
-        if GLOBAL_GAME_PLAYERS['Preneur'][0] in GLOBAL_GAME_PLAYERS['Défenseurs']:
+        if session.game_players['Preneur'][0] in session.game_players['Défenseurs']:
             await interaction.response.send_message('Le Preneur défend aussi?')
             return
 
-        if GLOBAL_GAME_PLAYERS['Partenaire'] and \
-                GLOBAL_GAME_PLAYERS['Partenaire'][0] in GLOBAL_GAME_PLAYERS['Défenseurs']:
+        if session.game_players['Partenaire'] and \
+                session.game_players['Partenaire'][0] in session.game_players['Défenseurs']:
             await interaction.response.send_message('Le Partenaire défend aussi?.')
             return
 
-        if GLOBAL_GAME_PLAYERS['Partenaire'] and GLOBAL_GAME_PLAYERS['Partenaire'][0] in GLOBAL_GAME_PLAYERS['Preneur']:
+        if session.game_players['Partenaire'] and \
+                session.game_players['Partenaire'][0] in session.game_players['Preneur']:
             await interaction.response.send_message('Le Partenaire est Preneur?.')
             return
 
-        n_players = len(GLOBAL_GAME_PLAYERS['Preneur'] + GLOBAL_GAME_PLAYERS['Partenaire'] +
-                        GLOBAL_GAME_PLAYERS['Défenseurs'])
+        n_players = len(session.game_players['Preneur'] + session.game_players['Partenaire'] +
+                        session.game_players['Défenseurs'])
 
         if n_players not in [3, 4, 5]:
             await interaction.response.send_message('Le Tarot ne se joue pas à {}.'.format(n_players))
             return
 
-        if GLOBAL_GAME_PLAYERS['Partenaire'] and n_players != 5:
+        if session.game_players['Partenaire'] and n_players != 5:
             await interaction.response.send_message('Pas de partenaire à moins de 5.')
             return
 
         n_chelem_tot = 0
-        for x in [GLOBAL_PRIMES_ATTAQUE, GLOBAL_PRIMES_DEFENSE]:
+        for x in [session.primes_attaque, session.primes_defense]:
             if x:
                 n_poignees = 0
                 n_chelem = 0
@@ -304,63 +355,74 @@ class GameCalculButton(discord.ui.View):
             await interaction.response.send_message("Un chelem par équipe.")
             return
 
-        if GLOBAL_PRIMES_ATTAQUE and GLOBAL_PRIMES_DEFENSE:
-            if "Petit au bout" in GLOBAL_PRIMES_ATTAQUE and "Petit au bout" in GLOBAL_PRIMES_DEFENSE:
+        if session.primes_attaque and session.primes_defense:
+            if "Petit au bout" in session.primes_attaque and "Petit au bout" in session.primes_defense:
                 await interaction.response.send_message('Un seul Petit.')
                 return
 
-        if GLOBAL_BOUTS is None:
-            GLOBAL_BOUTS = 0
+        if session.bouts is None:
+            session.bouts = 0
 
-        if not GLOBAL_ENCHERE:
+        if not session.enchere:
             await interaction.response.send_message('Pas de réponse pour les enchères.')
             return
 
-        for player in GLOBAL_MISERES:
-            if not (player in GLOBAL_GAME_PLAYERS['Preneur'] or player in GLOBAL_GAME_PLAYERS['Partenaire']
-                    or player in GLOBAL_GAME_PLAYERS['Défenseurs']):
+        for player in session.miseres:
+            if not (player in session.game_players['Preneur'] or player in session.game_players['Partenaire']
+                    or player in session.game_players['Défenseurs']):
                 await interaction.response.send_message(
                     'Le joueur {} est listé dans les misères mais ne joue pas.'.format(player))
                 return
 
-        scores = calcul_scores()
-        update_history(scores, partie_details())
+        scores = calcul_scores(session)
+        update_history(scores, partie_details(session))
         button.disabled = True  # After updating the score!
-        reset_cache()
+        pop_session(self.request_message_id)
         await interaction.response.edit_message(view=self)
         await interaction.followup.send(f"```\n{get_score_table_string(scores)}\n```")
 
 
 class DescendanteCalculButton(discord.ui.View):
-    def __init__(self, *, timeout=180):
+    def __init__(self, request_message_id, *, timeout=180):
         super().__init__(timeout=timeout)
+        self.request_message_id = request_message_id
+        self.view_generation = 0
+        session = get_session(request_message_id)
+        if session is not None:
+            _bind_calcul_view(session, self)
+
+    async def on_timeout(self):
+        await _expire_calcul_view(self)
 
     @discord.ui.button(label="Calcul", style=discord.ButtonStyle.blurple)
     async def calcul(self, interaction: discord.Interaction, button: discord.ui.Button):
-        global GLOBAL_DESCENDANTE_PLAYERS, GLOBAL_MISERES, GLOBAL_DESCENDANTE_POINTS
+        session = get_session(self.request_message_id)
+        if session is None:
+            await interaction.response.send_message(EXPIRED_MSG)
+            return
 
-        n_players = sum([bool(v) for v in GLOBAL_DESCENDANTE_PLAYERS.values()])
+        n_players = sum([bool(v) for v in session.descendante_players.values()])
 
-        if n_players != len(GLOBAL_DESCENDANTE_POINTS):
+        if n_players != len(session.descendante_points):
             await interaction.response.send_message('Merci de remplir toutes les entrées.')
             return
 
-        test_unique_dict = {player: 0 for player in GLOBAL_DESCENDANTE_PLAYERS.values() if player}
+        test_unique_dict = {player: 0 for player in session.descendante_players.values() if player}
         if len(test_unique_dict) != n_players:
             await interaction.response.send_message('Liste de joueurs non injective.')
             return
 
-        for player in GLOBAL_MISERES:
-            if player not in [p for p in GLOBAL_DESCENDANTE_PLAYERS if p]:
+        for player in session.miseres:
+            if player not in [p for p in session.descendante_players if p]:
                 await interaction.response.send_message(
                     'Le joueur {} est listé dans les misères mais ne joue pas.'.format(player))
                 return
 
-        scores = calcul_score_descendante(GLOBAL_DESCENDANTE_PLAYERS, GLOBAL_DESCENDANTE_POINTS)
-        scores = affecte_miseres(scores)
-        update_history(scores, descendante_details())
+        scores = calcul_score_descendante(session.descendante_players, session.descendante_points)
+        scores = affecte_miseres(scores, session)
+        update_history(scores, descendante_details(session))
         button.disabled = True  # After updating the score!
-        reset_cache()
+        pop_session(self.request_message_id)
         await interaction.response.edit_message(view=self)
         await interaction.followup.send(f"```\n{get_score_table_string(scores)}\n```")
 
@@ -375,7 +437,6 @@ async def game(ctx, value=-999):
     Par exemple, si l'attaque ne fait que deux plis avec que des cartes valant 0.5 points, l'attaque a marqué 5 points
     donc il faut rentrer "t/game 5".
     """
-    reset_cache()
     try:
         v = int(value)
     except (TypeError, ValueError):
@@ -402,24 +463,29 @@ async def game(ctx, value=-999):
         ))
         return
 
-    global GLOBAL_POINTS_ATTAQUE, GLOBAL_REQUEST_MESSAGE_ID
-    GLOBAL_POINTS_ATTAQUE = v
-    GLOBAL_REQUEST_MESSAGE_ID = ctx.message.id
-    await ctx.send("Alors? 👀", view=SelectViewGame())
-    await ctx.send("Des primes?", view=SelectViewPrimes())
-    await ctx.send("", view=GameCalculButton())
+    rid = ctx.message.id
+    session = create_session(
+        rid,
+        channel_id=ctx.channel.id,
+        author_id=ctx.author.id,
+        source='game',
+    )
+    session.points_attaque = v
+    session.kind = 'partie'
+    await ctx.send("Alors? 👀", view=SelectViewGame(rid))
+    await ctx.send("Des primes?", view=SelectViewPrimes(rid))
+    await ctx.send("", view=GameCalculButton(rid))
 
 
-def calcul_scores():
-    global GLOBAL_ENCHERE, GLOBAL_GAME_PLAYERS, GLOBAL_BOUTS, GLOBAL_PRIMES_ATTAQUE, GLOBAL_PRIMES_DEFENSE, \
-        GLOBAL_POINTS_ATTAQUE
-
+def calcul_scores(session: GameSession):
     # we consider all values to be legal (checked in the "calcul" button)
-    delta = GLOBAL_POINTS_ATTAQUE - CONTRAT_PAR_BOUT[GLOBAL_BOUTS]
+    delta = session.points_attaque - CONTRAT_PAR_BOUT[session.bouts]
     s = delta / abs(delta) if delta != 0 else 1
-    primes_attaque = {k: (v if k in GLOBAL_PRIMES_ATTAQUE else 0) for (k, v) in PRIMES.items()}
-    primes_defense = {k: (v if k in GLOBAL_PRIMES_DEFENSE else 0) for (k, v) in PRIMES.items()}
-    score = GLOBAL_ENCHERE * (abs(delta) + 25 + s * (primes_attaque['Petit au bout'] - primes_defense['Petit au bout']))
+    primes_attaque = {k: (v if k in session.primes_attaque else 0) for (k, v) in PRIMES.items()}
+    primes_defense = {k: (v if k in session.primes_defense else 0) for (k, v) in PRIMES.items()}
+    score = session.enchere * (
+        abs(delta) + 25 + s * (primes_attaque['Petit au bout'] - primes_defense['Petit au bout'])
+    )
     score += primes_attaque['Simple Poignée'] \
         + primes_attaque['Double Poignée'] \
         + primes_attaque['Triple Poignée'] \
@@ -429,21 +495,21 @@ def calcul_scores():
 
     score += primes_attaque["Chelem annoncé"] + primes_attaque["Chelem non annoncé"] + primes_attaque["Chelem chuté"]
 
-    score_attaquant = s * score * len(GLOBAL_GAME_PLAYERS['Défenseurs'])
-    score_attaquant -= len(GLOBAL_GAME_PLAYERS['Défenseurs']) * primes_defense["Chelem non annoncé"]
+    score_attaquant = s * score * len(session.game_players['Défenseurs'])
+    score_attaquant -= len(session.game_players['Défenseurs']) * primes_defense["Chelem non annoncé"]
     score_defense = -s * score + primes_defense["Chelem non annoncé"]
     scores = {}
 
-    if GLOBAL_GAME_PLAYERS['Partenaire']:
-        scores[GLOBAL_GAME_PLAYERS['Partenaire'][0]] = score_attaquant // 3
-        scores[GLOBAL_GAME_PLAYERS['Preneur'][0]] = (2 * score_attaquant) // 3
+    if session.game_players['Partenaire']:
+        scores[session.game_players['Partenaire'][0]] = score_attaquant // 3
+        scores[session.game_players['Preneur'][0]] = (2 * score_attaquant) // 3
     else:
-        scores[GLOBAL_GAME_PLAYERS['Preneur'][0]] = score_attaquant
+        scores[session.game_players['Preneur'][0]] = score_attaquant
 
-    for def_name in GLOBAL_GAME_PLAYERS['Défenseurs']:
+    for def_name in session.game_players['Défenseurs']:
         scores[def_name] = score_defense
 
-    scores = affecte_miseres(scores)
+    scores = affecte_miseres(scores, session)
 
     return scores
 
@@ -470,8 +536,6 @@ async def descendante(ctx, *points):
     Par exemple "t/descendante 20 20 51" fera remplir les noms de 3 joueurs dont les points respectifs
     sont 20, 20 et 51.
     """
-    reset_cache()
-    global GLOBAL_DESCENDANTE_POINTS, GLOBAL_REQUEST_MESSAGE_ID
     try:
         points = [int(point) for point in points]
     except (TypeError, ValueError):
@@ -481,7 +545,6 @@ async def descendante(ctx, *points):
             'Exemple : `t/descendante 20 20 51`',
         ))
         return
-    GLOBAL_DESCENDANTE_POINTS = points
     n_players = len(points)
 
     if n_players not in [3, 4, 5]:
@@ -501,9 +564,20 @@ async def descendante(ctx, *points):
             ))
             return
 
-    GLOBAL_REQUEST_MESSAGE_ID = ctx.message.id
-    await ctx.send("Somme des points = {}.\nJoueurs respectifs:".format(sum(points)), view=SelectViewDescendante())
-    await ctx.send("", view=DescendanteCalculButton())
+    rid = ctx.message.id
+    session = create_session(
+        rid,
+        channel_id=ctx.channel.id,
+        author_id=ctx.author.id,
+        source='descendante',
+    )
+    session.descendante_points = points
+    session.kind = 'descendante'
+    await ctx.send(
+        "Somme des points = {}.\nJoueurs respectifs:".format(sum(points)),
+        view=SelectViewDescendante(rid, n_players),
+    )
+    await ctx.send("", view=DescendanteCalculButton(rid))
 
 
 def get_score_table_string(scores):
@@ -519,12 +593,15 @@ def get_score_table_string(scores):
     return output
 
 
-def affecte_miseres(scores):
-    global GLOBAL_GAME_PLAYERS, GLOBAL_MISERES
-    all_players = GLOBAL_GAME_PLAYERS['Preneur'] + GLOBAL_GAME_PLAYERS['Partenaire'] + GLOBAL_GAME_PLAYERS['Défenseurs']
+def affecte_miseres(scores, session: GameSession):
+    all_players = (
+        session.game_players['Preneur']
+        + session.game_players['Partenaire']
+        + session.game_players['Défenseurs']
+    )
     n_players = len(all_players)
 
-    for misere_player in GLOBAL_MISERES:
+    for misere_player in session.miseres:
         # misere_player will lose 10 in the following loop, so all other players give misere_player 10
         scores[misere_player] += n_players * 10
         for player in all_players:
@@ -603,11 +680,9 @@ def resolve_player(token, players, index):
     return index.get(token.casefold())
 
 
-def autoparse(msg):
-    global GLOBAL_ENCHERE, GLOBAL_GAME_PLAYERS, GLOBAL_BOUTS, GLOBAL_PRIMES_ATTAQUE, GLOBAL_PRIMES_DEFENSE, \
-        GLOBAL_POINTS_ATTAQUE, GLOBAL_DESCENDANTE_PLAYERS, GLOBAL_MISERES, GLOBAL_DESCENDANTE_POINTS
-
+def autoparse(msg, session: GameSession):
     enchere_name = None
+    session.clear_parse_state()
     msg = clean_msg(msg)
     msg_list = msg.split(' ')
     msg_lower_list = msg.lower().split(' ')
@@ -621,16 +696,16 @@ def autoparse(msg):
     preneur = resolve_player(preneur_token, PLAYERS, names)
     if preneur is None:
         if unidecode(preneur_token).lower() in ['desc', 'descendante']:
-            return autoparse_desc(msg)
+            return autoparse_desc(msg, session)
         raise ParseError(
             f'Le premier mot doit être le preneur, déjà ajouté au classement, '
             f'ou desc / descendante. « {preneur_token} » n’est pas un joueur. '
             f'Vérifie l’orthographe, ou ajoute-le avec `t/add_player {preneur_token}`.'
         )
-    GLOBAL_GAME_PLAYERS['Preneur'] = [preneur]
+    session.game_players['Preneur'] = [preneur]
 
     if 'petite' in msg.lower():
-        GLOBAL_ENCHERE = 1
+        session.enchere = 1
         if 'garde' in msg.lower():
             raise ParseError(
                 'Une seule enchère : petite, garde, garde sans ou garde contre.'
@@ -638,17 +713,17 @@ def autoparse(msg):
         enchere_name = 'petite'
     elif 'garde' in msg.lower():
         if 'garde sans' in msg.lower():
-            GLOBAL_ENCHERE = 4
+            session.enchere = 4
             if 'garde contre' in msg.lower():
                 raise ParseError(
                     'Une seule enchère : garde sans ou garde contre, pas les deux.'
                 )
             enchere_name = 'garde sans'
         elif 'garde contre' in msg.lower():
-            GLOBAL_ENCHERE = 6
+            session.enchere = 6
             enchere_name = 'garde contre'
         else:
-            GLOBAL_ENCHERE = 2  # garde
+            session.enchere = 2  # garde
             enchere_name = 'garde'
     else:
         raise ParseError(
@@ -698,7 +773,7 @@ def autoparse(msg):
             matched = resolve_player(e, PLAYERS, names)
             if matched:
                 avec_count += 1
-                GLOBAL_GAME_PLAYERS['Partenaire'].append(matched)
+                session.game_players['Partenaire'].append(matched)
             if avec_count > 1:
                 raise ParseError('Un seul partenaire après avec.')
 
@@ -764,7 +839,7 @@ def autoparse(msg):
             for e in segment_msg_list:
                 matched = resolve_player(e, PLAYERS, names)
                 if matched:
-                    GLOBAL_GAME_PLAYERS['Défenseurs'].append(matched)
+                    session.game_players['Défenseurs'].append(matched)
                     def_players_count += 1
             if def_players_count <= 1 or def_players_count >= 5:
                 raise ParseError(
@@ -772,7 +847,7 @@ def autoparse(msg):
                     f'J’en ai trouvé {def_players_count} dans : {" ".join(segment_msg_list)}. '
                     'Vérifie les noms (t/add_player) et sépare-les par des espaces.'
                 )
-            if GLOBAL_GAME_PLAYERS['Partenaire'] and def_players_count != 3:
+            if session.game_players['Partenaire'] and def_players_count != 3:
                 raise ParseError(
                     f'Avec un partenaire, il faut exactement 3 défenseurs après vs '
                     f'(partie à 5). J’en ai trouvé {def_players_count}.'
@@ -780,24 +855,24 @@ def autoparse(msg):
         elif seg_name == 'prime_a':
             for prime_name in PRIMES.keys():
                 if unidecode(prime_name.lower()) in unidecode(segment_msg.lower()):
-                    GLOBAL_PRIMES_ATTAQUE.append(prime_name)
+                    session.primes_attaque.append(prime_name)
 
         elif seg_name == 'prime_d':
             for prime_name in PRIMES.keys():
                 if unidecode(prime_name.lower()) in unidecode(segment_msg.lower()):
-                    GLOBAL_PRIMES_DEFENSE.append(prime_name)
+                    session.primes_defense.append(prime_name)
 
         elif seg_name == 'misere':
             for e in segment_msg_list:
                 matched = resolve_player(e, PLAYERS, names)
                 if matched:
-                    GLOBAL_MISERES.append(matched)
+                    session.miseres.append(matched)
 
     # find number of bouts: assume it's the only number between 0 and 3 separated by spaces
     for bouts in [0, 1, 2, 3]:
         found_bouts = 0
         if str(bouts) in msg_list:
-            GLOBAL_BOUTS = bouts
+            session.bouts = bouts
             found_bouts += 1
         if found_bouts > 1:
             raise ParseError('Un seul nombre de bouts : 0, 1, 2 ou 3.')
@@ -806,7 +881,7 @@ def autoparse(msg):
     for e in msg_list:
         found_scores = 0
         if e.isnumeric() and int(e) >= 4:
-            GLOBAL_POINTS_ATTAQUE = int(e)
+            session.points_attaque = int(e)
             found_scores += 1
         if found_scores > 1:
             raise ParseError(
@@ -814,33 +889,36 @@ def autoparse(msg):
                 'Les bouts restent 0, 1, 2 ou 3.'
             )
 
-    if GLOBAL_POINTS_ATTAQUE is None:
+    if session.points_attaque is None:
         raise ParseError(
             'Il manque le score de l’attaque : un nombre supérieur ou égal à 4. '
             'Exemple : `t/auto Alice garde 45 2 vs Bob Carol`'
         )
 
-    reparse = (f"Preneur:    {GLOBAL_GAME_PLAYERS['Preneur']},\n"
-               f"Partenaire: {GLOBAL_GAME_PLAYERS['Partenaire']},\n"
-               f"Score:      {GLOBAL_POINTS_ATTAQUE},\n"
-               f"Bouts:      {GLOBAL_BOUTS},\n"
-               f"Enchère:    {enchere_name} ({GLOBAL_ENCHERE}),\n"
-               f"Défense:    {GLOBAL_GAME_PLAYERS['Défenseurs']},\n"
-               f"Primes Att: {GLOBAL_PRIMES_ATTAQUE},\n"
-               f"Primes Déf: {GLOBAL_PRIMES_DEFENSE},\n"
-               f"Misères:    {GLOBAL_MISERES}")
+    session.kind = 'partie'
+    reparse = (f"Preneur:    {session.game_players['Preneur']},\n"
+               f"Partenaire: {session.game_players['Partenaire']},\n"
+               f"Score:      {session.points_attaque},\n"
+               f"Bouts:      {session.bouts},\n"
+               f"Enchère:    {enchere_name} ({session.enchere}),\n"
+               f"Défense:    {session.game_players['Défenseurs']},\n"
+               f"Primes Att: {session.primes_attaque},\n"
+               f"Primes Déf: {session.primes_defense},\n"
+               f"Misères:    {session.miseres}")
 
-    if GLOBAL_BOUTS is None:
+    if session.bouts is None:
         reparse += '\n⚠️ Aucun bout (0, 1, 2 ou 3).'
 
+    session.reparse = reparse
     return reparse
 
 
-def autoparse_desc(msg):
+def autoparse_desc(msg, session: GameSession):
     """
-    Parses a message starting with 'descendante', then a names and scores. Updates the global params for descendante.
+    Parses a message starting with 'descendante', then a names and scores.
     Omitting punctuation, assumes 'descendante <name1> <score1> <name2> <score2> ...'
     """
+    session.clear_parse_state()
     msg = clean_msg(msg)
     msg_list = msg.split(' ')
 
@@ -856,8 +934,8 @@ def autoparse_desc(msg):
                     f'Il manque le score de {matched}. '
                     'Forme : `t/auto descendante Alice 20 Bob 20 Carol 51`'
                 )
-            GLOBAL_DESCENDANTE_PLAYERS[f'#{player_idx}'] = matched
-            GLOBAL_DESCENDANTE_POINTS.append(int(msg_list[e_idx + 1]))
+            session.descendante_players[f'#{player_idx}'] = matched
+            session.descendante_points.append(int(msg_list[e_idx + 1]))
             player_idx += 1
 
     if player_idx == 1:
@@ -866,11 +944,79 @@ def autoparse_desc(msg):
             '(noms déjà au classement, chacun suivi de son score).'
         )
 
+    session.kind = 'descendante'
     reparse = f"Descendante:\n"
-    for player_score, player in list(zip(GLOBAL_DESCENDANTE_POINTS, GLOBAL_DESCENDANTE_PLAYERS.values())):
+    for player_score, player in list(zip(session.descendante_points, session.descendante_players.values())):
         reparse = reparse + f"{player}: {player_score},\n"
 
-    return reparse[:-2]  # removes last ,\n
+    reparse = reparse[:-2]  # removes last ,\n
+    session.reparse = reparse
+    return reparse
+
+
+def extract_auto_body(content: str):
+    """Retourne le corps apres t/auto, ou None si ce n'est pas une commande auto."""
+    if not content:
+        return None
+    text = content.strip()
+    if not text.lower().startswith('t/'):
+        return None
+    rest = text[2:].lstrip()
+    parts = rest.split(None, 1)
+    if not parts or parts[0].lower() != 'auto':
+        return None
+    return parts[1] if len(parts) > 1 else ''
+
+
+def handle_auto_edit(message_id: int, new_content: str, author_id: int, history=None):
+    """Logique pure pour une edition de message t/auto.
+
+    Returns
+    -------
+    (action, payload)
+        action in {'noop', 'updated', 'warn', 'error', 'ignore'}
+        payload : session mise a jour, message d'erreur, ou None
+    """
+    body = extract_auto_body(new_content)
+    if body is None:
+        return 'ignore', None
+
+    session = get_session(message_id)
+    if session is not None:
+        if session.source != 'auto':
+            return 'ignore', None
+        if session.author_id is not None and author_id != session.author_id:
+            return 'ignore', None
+        trial = temp_session()
+        try:
+            new_reparse = autoparse(body, trial)
+        except ParseError as e:
+            return 'error', e.args[0]
+        if new_reparse == session.reparse:
+            return 'noop', None
+        session.copy_parse_from(trial)
+        return 'updated', session
+
+    if history is None:
+        history = load_history()
+    entry = find_history_by_message_id(history, message_id)
+    if entry is None:
+        return 'ignore', None
+
+    trial = temp_session()
+    try:
+        autoparse(body, trial)
+    except ParseError:
+        # Edition illisible mais partie deja enregistree : avertir quand meme
+        # si on ne peut pas comparer ; on avertit pour toute edition d'un
+        # message deja lie a l'historique.
+        return 'warn', entry
+
+    hist_sem = semantic_from_history(entry)
+    new_sem = semantic_from_session(trial)
+    if hist_sem is None or hist_sem == new_sem:
+        return 'noop', None
+    return 'warn', entry
 
 
 @commands.command()
@@ -887,18 +1033,28 @@ async def auto(ctx, *, value):
     Descendante: commencer par 'Descendante' ou desc puis mettre nom, score, nom, score etc
 
     """
-    reset_cache()
-    global GLOBAL_DESCENDANTE_POINTS, GLOBAL_REQUEST_MESSAGE_ID
+    rid = ctx.message.id
+    session = create_session(
+        rid,
+        channel_id=ctx.channel.id,
+        author_id=ctx.author.id,
+        source='auto',
+    )
     try:
-        reparse = autoparse(value)  # affects global values for the game information
+        reparse = autoparse(value, session)
     except ParseError as e:
-        reset_cache()
+        pop_session(rid)
         await ctx.send(error_message('auto', e.args[0]))
         return
-    GLOBAL_REQUEST_MESSAGE_ID = ctx.message.id
-    msg = '**Is this parse correct?:**\n' + reparse
-    if reparse[:13] == 'Descendante:\n':  # parsed a descendante
-        await ctx.send(f"Somme des points = {sum(GLOBAL_DESCENDANTE_POINTS)}." + msg,
-                       view=DescendanteCalculButton())
-    else:  # parsed a normal game
-        await ctx.send(msg, view=GameCalculButton())
+
+    if session.kind == 'descendante' or reparse.startswith('Descendante:\n'):
+        confirm = await ctx.send(
+            confirm_message_content(session),
+            view=DescendanteCalculButton(rid),
+        )
+    else:
+        confirm = await ctx.send(
+            confirm_message_content(session),
+            view=GameCalculButton(rid),
+        )
+    session.confirm_message_id = confirm.id
