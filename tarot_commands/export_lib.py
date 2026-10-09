@@ -26,21 +26,21 @@ def build_export(dest_dir=None, src=None):
     """
     if src is None:
         src = data_dir()
-    stamp = datetime.now().strftime('%Y-%m-%d_%H%M%S')
+    stamp = datetime.now().strftime("%Y-%m-%d_%H%M%S")
     if dest_dir is None:
-        dest_dir = tempfile.mkdtemp(prefix='tarotbot-export-')
-    path = os.path.join(dest_dir, f'tarotbot-export-{stamp}.zip')
+        dest_dir = tempfile.mkdtemp(prefix="tarotbot-export-")
+    path = os.path.join(dest_dir, f"tarotbot-export-{stamp}.zip")
 
-    with zipfile.ZipFile(path, 'w', zipfile.ZIP_DEFLATED) as zf:
+    with zipfile.ZipFile(path, "w", zipfile.ZIP_DEFLATED) as zf:
         for entry in sorted(os.listdir(src)):
             full = os.path.join(src, entry)
             if entry in EXCLUDED_FILES or entry in EXCLUDED_DIRS:
                 continue
             # Copies de securite locales (restauration, migration,
             # rebuild_history.py) : gardees par restic, inutiles dans l'export.
-            if entry.startswith(('_pre_restore_', '_pre_migration_')):
+            if entry.startswith(("_pre_restore_", "_pre_migration_")):
                 continue
-            if entry.startswith('history.backup-') and entry.endswith('.json'):
+            if entry.startswith("history.backup-") and entry.endswith(".json"):
                 continue
             if os.path.isdir(full):
                 for root, _dirs, files in os.walk(full):
@@ -49,6 +49,6 @@ def build_export(dest_dir=None, src=None):
                             continue
                         file_path = os.path.join(root, filename)
                         zf.write(file_path, os.path.relpath(file_path, src))
-            elif entry.endswith('.json'):
+            elif entry.endswith(".json"):
                 zf.write(full, entry)
     return path

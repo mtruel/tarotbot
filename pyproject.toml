@@ -15,3 +15,49 @@ dependencies = [
 
 [tool.uv]
 package = false
+
+[dependency-groups]
+dev = [
+    "ruff>=0.16.10",
+    "ty>=0.0.85",
+]
+
+[tool.ruff]
+target-version = "py312"
+line-length = 100
+src = [".", "tarot_commands", "tests"]
+
+[tool.ruff.lint]
+select = [
+    "E",   # pycodestyle errors
+    "W",   # pycodestyle warnings
+    "F",   # Pyflakes
+    "I",   # isort
+    "UP",  # pyupgrade
+    "B",   # flake8-bugbear
+    "SIM", # flake8-simplify
+    "RUF", # Ruff-specific
+]
+ignore = [
+    "E501",   # lignes longues (aide Discord, messages FR)
+    "RUF001", # apostrophes typographiques FR (’)
+    "RUF002", # idem dans les docstrings
+    "RUF003", # idem dans les commentaires
+]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/**" = ["B023"]
+
+[tool.ruff.format]
+quote-style = "double"
+
+[tool.ty.environment]
+python-version = "3.12"
+
+[tool.ty.src]
+exclude = ["rebuild_history.py"]
+
+[[tool.ty.overrides]]
+include = ["tests/**"]
+# discord.py tape mal les .callback des commandes ; les tests les appellent directement
+rules = { "invalid-argument-type" = "ignore", "too-many-positional-arguments" = "ignore", "missing-argument" = "ignore", "unresolved-attribute" = "ignore" }

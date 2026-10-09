@@ -39,14 +39,15 @@ async def export(ctx, action=None):
     """
     if action is None:
         await _export_zip(ctx)
-    elif action.lower() == 'backup':
+    elif action.lower() == "backup":
         await _export_backup(ctx)
     else:
-        await ctx.send(error_message(
-            'export',
-            f'Action inconnue : `{action}`. Utilise `t/export` ou '
-            '`t/export backup`.',
-        ))
+        await ctx.send(
+            error_message(
+                "export",
+                f"Action inconnue : `{action}`. Utilise `t/export` ou `t/export backup`.",
+            )
+        )
 
 
 async def _export_zip(ctx):
@@ -55,11 +56,11 @@ async def _export_zip(ctx):
         size = os.path.getsize(path)
         if size > DISCORD_UPLOAD_LIMIT:
             await ctx.send(
-                f'Export trop volumineux pour Discord ({size / 1_000_000:.1f} Mo). '
-                'Utilise `t/export backup` à la place.'
+                f"Export trop volumineux pour Discord ({size / 1_000_000:.1f} Mo). "
+                "Utilise `t/export backup` à la place."
             )
             return
-        await ctx.send('Export des données :', file=discord.File(path))
+        await ctx.send("Export des données :", file=discord.File(path))
     finally:
         # Le dossier temporaire est propre a cette commande : on le supprime.
         shutil.rmtree(os.path.dirname(path), ignore_errors=True)
@@ -78,22 +79,21 @@ async def _copy_drive_background(ctx, snapshot_short):
     try:
         remote, copied = await asyncio.to_thread(copy_to_drive)
         await ctx.send(
-            f'Copie Drive à jour (`{snapshot_short}`, {copied} snapshot(s) '
-            f'copié(s)) : `{remote}`.'
+            f"Copie Drive à jour (`{snapshot_short}`, {copied} snapshot(s) copié(s)) : `{remote}`."
         )
     except BackupError as exc:
         await ctx.send(
-            f'Le snapshot `{snapshot_short}` est bien en local (`data/restic`), '
-            f'mais la copie vers Google Drive a échoué : {exc}'
+            f"Le snapshot `{snapshot_short}` est bien en local (`data/restic`), "
+            f"mais la copie vers Google Drive a échoué : {exc}"
         )
 
 
 async def _export_backup(ctx):
-    await ctx.send('Sauvegarde restic locale en cours...')
+    await ctx.send("Sauvegarde restic locale en cours...")
     try:
         snapshot_id, archive = await asyncio.to_thread(_run_backup_local)
     except BackupError as exc:
-        await ctx.send(error_message('export', str(exc)))
+        await ctx.send(error_message("export", str(exc)))
         return
 
     snapshot_short = snapshot_id[:8]
@@ -101,19 +101,17 @@ async def _export_backup(ctx):
         size = os.path.getsize(archive)
         if size > DISCORD_UPLOAD_LIMIT:
             await ctx.send(
-                f'Archive trop volumineuse pour Discord ({size / 1_000_000:.1f} Mo). '
-                f'Snapshot restic `{snapshot_short}` cree dans `data/restic`. '
-                f'Copie vers Google Drive (`{remote_repo()}`) en cours...'
+                f"Archive trop volumineuse pour Discord ({size / 1_000_000:.1f} Mo). "
+                f"Snapshot restic `{snapshot_short}` cree dans `data/restic`. "
+                f"Copie vers Google Drive (`{remote_repo()}`) en cours..."
             )
         else:
             await ctx.send(
-                f'Snapshot restic `{snapshot_short}` cree. '
-                'Archive du depot restic local (tout l\'historique) :',
+                f"Snapshot restic `{snapshot_short}` cree. "
+                "Archive du depot restic local (tout l'historique) :",
                 file=discord.File(archive),
             )
-            await ctx.send(
-                f'Copie vers Google Drive (`{remote_repo()}`) en cours...'
-            )
+            await ctx.send(f"Copie vers Google Drive (`{remote_repo()}`) en cours...")
     finally:
         shutil.rmtree(os.path.dirname(archive), ignore_errors=True)
 

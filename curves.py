@@ -1,9 +1,10 @@
+import discord
 import matplotlib.pyplot as plt
 import numpy as np
-from tarot_commands.state import compute_scores, load_history
-from matplotlib import colormaps
 from discord.ext import commands
-import discord
+from matplotlib import colormaps
+
+from tarot_commands.state import compute_scores, load_history
 
 
 def render_curves():
@@ -20,22 +21,22 @@ def render_curves():
 
     for t, hist in enumerate(HISTORY):
         delta = np.zeros(n_players)
-        idxs = [player_to_idx[p] for p in hist['scores'].keys()]
-        delta[idxs] = list(hist['scores'].values())
+        idxs = [player_to_idx[p] for p in hist["scores"]]
+        delta[idxs] = list(hist["scores"].values())
         scores[t + 1] = scores[t] + delta
         for i in idxs:
             played_games[i].append(t + 1)
 
-    cm = colormaps['gist_ncar'].resampled(3 * n_players)
+    cm = colormaps["gist_ncar"].resampled(3 * n_players)
     fig = plt.figure(figsize=(21, 12), dpi=150)
     ends = []
     for p, i in player_to_idx.items():
-        color = cm(1 - (i + 1)/(n_players + 1))
+        color = cm(1 - (i + 1) / (n_players + 1))
         plt.plot(
             scores[:, i],
             label=p,
             color=color,
-            marker='o',
+            marker="o",
             markersize=3,
             markeredgewidth=0,
             markevery=played_games[i],
@@ -54,22 +55,22 @@ def render_curves():
             placed[j] = placed[j - 1] + min_gap
     label_y[order] = placed
 
-    for (_, p, color), text_y in zip(ends, label_y):
+    for (_, p, color), text_y in zip(ends, label_y, strict=False):
         plt.text(
             n_games,
             text_y,
-            '  ' + p,
-            va='center',
-            ha='left',
+            "  " + p,
+            va="center",
+            ha="left",
             fontsize=8,
             color=color,
             clip_on=False,
         )
 
-    plt.legend(loc='center left')
-    plt.title('Le jeu tourne')
-    plt.xlabel('nombre de parties')
-    plt.ylabel('score')
+    plt.legend(loc="center left")
+    plt.title("Le jeu tourne")
+    plt.xlabel("nombre de parties")
+    plt.ylabel("score")
     plt.grid(True, alpha=0.4)
     plt.gca().set_axisbelow(True)
     plt.savefig("curves.png", format="png", bbox_inches="tight")
@@ -82,7 +83,7 @@ async def curves(ctx):
     """
     render_curves()
 
-    with open('curves.png', 'rb') as f:
+    with open("curves.png", "rb") as f:
         picture = discord.File(f)
 
     await ctx.send(file=picture)

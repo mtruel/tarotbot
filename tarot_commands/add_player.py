@@ -1,4 +1,4 @@
-from discord.ext import commands  # type: ignore
+from discord.ext import commands
 
 from tarot_commands.game import player_index, resolve_player
 from tarot_commands.state import known_players, save_player_names
@@ -10,11 +10,11 @@ async def add_player(ctx, player_name):
     players = known_players()
     existing = resolve_player(player_name, players, player_index(players))
     if existing:
-        await ctx.send('{} is already listed!'.format(existing))
+        await ctx.send(f"{existing} is already listed!")
     else:
         players.append(player_name)
         save_player_names(players)
-        await ctx.send('Successfully added {}.'.format(player_name))
+        await ctx.send(f"Successfully added {player_name}.")
 
 
 @commands.command()
@@ -36,5 +36,5 @@ async def add_players(ctx, *, msg):
 
     save_player_names(players)
     if names_already_listed:
-        await ctx.send(f'Players {names_already_listed} are already listed!')
-    await ctx.send(f'Successfully added {names_added}.')
+        await ctx.send(f"Players {names_already_listed} are already listed!")
+    await ctx.send(f"Successfully added {names_added}.")

@@ -4,34 +4,34 @@ from __future__ import annotations
 
 from copy import deepcopy
 from dataclasses import dataclass, field
-from typing import Any, Optional
+from typing import Any
 
 
 def _empty_game_players():
-    return {'Preneur': [], 'Partenaire': [], 'Défenseurs': []}
+    return {"Preneur": [], "Partenaire": [], "Défenseurs": []}
 
 
 def _empty_descendante_players():
-    return {'#1': None, '#2': None, '#3': None, '#4': None, '#5': None}
+    return {"#1": None, "#2": None, "#3": None, "#4": None, "#5": None}
 
 
 @dataclass
 class GameSession:
     request_message_id: int
-    channel_id: Optional[int] = None
-    author_id: Optional[int] = None
-    confirm_message_id: Optional[int] = None
-    edit_target_message_id: Optional[int] = None
+    channel_id: int | None = None
+    author_id: int | None = None
+    confirm_message_id: int | None = None
+    edit_target_message_id: int | None = None
     view_generation: int = 0
-    kind: str = 'partie'  # 'partie' | 'descendante'
-    source: str = 'auto'  # 'auto' | 'game' | 'descendante' | 'edit'
-    reparse: str = ''
-    enchere: Optional[int] = None
+    kind: str = "partie"  # 'partie' | 'descendante'
+    source: str = "auto"  # 'auto' | 'game' | 'descendante' | 'edit'
+    reparse: str = ""
+    enchere: int | None = None
     game_players: dict = field(default_factory=_empty_game_players)
-    bouts: Optional[int] = None
+    bouts: int | None = None
     primes_attaque: list = field(default_factory=list)
     primes_defense: list = field(default_factory=list)
-    points_attaque: Optional[int] = None
+    points_attaque: int | None = None
     descendante_players: dict = field(default_factory=_empty_descendante_players)
     descendante_points: list = field(default_factory=list)
     miseres: list = field(default_factory=list)
@@ -47,10 +47,10 @@ class GameSession:
         self.descendante_players = _empty_descendante_players()
         self.descendante_points = []
         self.miseres = []
-        self.reparse = ''
-        self.kind = 'partie'
+        self.reparse = ""
+        self.kind = "partie"
 
-    def copy_parse_from(self, other: 'GameSession'):
+    def copy_parse_from(self, other: GameSession):
         self.kind = other.kind
         self.reparse = other.reparse
         self.enchere = other.enchere
@@ -70,9 +70,9 @@ pending: dict[int, GameSession] = {}
 def create_session(
     request_message_id: int,
     *,
-    channel_id: Optional[int] = None,
-    author_id: Optional[int] = None,
-    source: str = 'auto',
+    channel_id: int | None = None,
+    author_id: int | None = None,
+    source: str = "auto",
 ) -> GameSession:
     session = GameSession(
         request_message_id=request_message_id,
@@ -84,13 +84,13 @@ def create_session(
     return session
 
 
-def get_session(request_message_id: Optional[int]) -> Optional[GameSession]:
+def get_session(request_message_id: int | None) -> GameSession | None:
     if request_message_id is None:
         return None
     return pending.get(request_message_id)
 
 
-def pop_session(request_message_id: Optional[int]) -> Optional[GameSession]:
+def pop_session(request_message_id: int | None) -> GameSession | None:
     if request_message_id is None:
         return None
     return pending.pop(request_message_id, None)
@@ -106,22 +106,20 @@ def temp_session() -> GameSession:
 
 
 def semantic_from_session(session: GameSession) -> tuple:
-    if session.kind == 'descendante' or (
-        session.reparse.startswith('Descendante:\n')
-    ):
+    if session.kind == "descendante" or (session.reparse.startswith("Descendante:\n")):
         joueurs = [p for p in session.descendante_players.values() if p]
         return (
-            'descendante',
+            "descendante",
             tuple(joueurs),
             tuple(session.descendante_points),
             tuple(session.miseres),
         )
-    partenaire = session.game_players['Partenaire']
+    partenaire = session.game_players["Partenaire"]
     return (
-        'partie',
-        tuple(session.game_players['Preneur']),
+        "partie",
+        tuple(session.game_players["Preneur"]),
         partenaire[0] if partenaire else None,
-        tuple(session.game_players['Défenseurs']),
+        tuple(session.game_players["Défenseurs"]),
         session.points_attaque,
         session.bouts,
         session.enchere,
@@ -131,47 +129,47 @@ def semantic_from_session(session: GameSession) -> tuple:
     )
 
 
-def semantic_from_history(entry: dict[str, Any]) -> Optional[tuple]:
-    entry_type = entry.get('type')
-    if entry_type == 'descendante':
+def semantic_from_history(entry: dict[str, Any]) -> tuple | None:
+    entry_type = entry.get("type")
+    if entry_type == "descendante":
         return (
-            'descendante',
-            tuple(entry.get('joueurs') or []),
-            tuple(entry.get('points') or []),
-            tuple(entry.get('miseres') or []),
+            "descendante",
+            tuple(entry.get("joueurs") or []),
+            tuple(entry.get("points") or []),
+            tuple(entry.get("miseres") or []),
         )
-    if entry_type == 'partie':
+    if entry_type == "partie":
         return (
-            'partie',
-            (entry.get('preneur'),) if entry.get('preneur') else (),
-            entry.get('partenaire'),
-            tuple(entry.get('defenseurs') or []),
-            entry.get('points_attaque'),
-            entry.get('bouts'),
-            entry.get('multiplicateur'),
-            tuple(entry.get('primes_attaque') or []),
-            tuple(entry.get('primes_defense') or []),
-            tuple(entry.get('miseres') or []),
+            "partie",
+            (entry.get("preneur"),) if entry.get("preneur") else (),
+            entry.get("partenaire"),
+            tuple(entry.get("defenseurs") or []),
+            entry.get("points_attaque"),
+            entry.get("bouts"),
+            entry.get("multiplicateur"),
+            tuple(entry.get("primes_attaque") or []),
+            tuple(entry.get("primes_defense") or []),
+            tuple(entry.get("miseres") or []),
         )
     return None
 
 
-def find_history_by_message_id(history: list, message_id: int) -> Optional[dict]:
+def find_history_by_message_id(history: list, message_id: int) -> dict | None:
     """Trouve une partie par id canonique ou id de message tableau (related)."""
     for entry in history:
-        if entry.get('message_id') == message_id:
+        if entry.get("message_id") == message_id:
             return entry
-        related = entry.get('related_message_ids') or []
+        related = entry.get("related_message_ids") or []
         if message_id in related:
             return entry
     return None
 
 
-def find_history_index_by_message_id(history: list, message_id: int) -> Optional[int]:
+def find_history_index_by_message_id(history: list, message_id: int) -> int | None:
     for index, entry in enumerate(history):
-        if entry.get('message_id') == message_id:
+        if entry.get("message_id") == message_id:
             return index
-        related = entry.get('related_message_ids') or []
+        related = entry.get("related_message_ids") or []
         if message_id in related:
             return index
     return None

@@ -1,32 +1,33 @@
+import json
+import os
 import traceback
 
 import discord
 from discord.ext import commands
-import json
-from tarot_commands.ping import ping
+from dotenv import load_dotenv
+
+from curves import curves
 from tarot_commands.add_player import add_player, add_players
-from tarot_commands.leaderboard import leaderboard, leaderboard2
-from tarot_commands.game import (
-    game,
-    descendante,
-    auto,
-    handle_auto_edit,
-    confirm_message_content,
-    GameCalculButton,
-    DescendanteCalculButton,
-)
-from tarot_commands.rules import poignees, contrats, scores_descendante
 from tarot_commands.delete import delete
 from tarot_commands.edit import EditOverwriteButton, edit, handle_edit_message_edit
-from tarot_commands.undo import undo
-from tarot_commands.new_season import new_season
-from tarot_commands.help import explain_command_error, help, more_info, error_message
 from tarot_commands.export import export
+from tarot_commands.game import (
+    DescendanteCalculButton,
+    GameCalculButton,
+    auto,
+    confirm_message_content,
+    descendante,
+    game,
+    handle_auto_edit,
+)
+from tarot_commands.help import error_message, explain_command_error, help, more_info
+from tarot_commands.leaderboard import leaderboard, leaderboard2
+from tarot_commands.new_season import new_season
+from tarot_commands.ping import ping
 from tarot_commands.restore import restore
+from tarot_commands.rules import contrats, poignees, scores_descendante
 from tarot_commands.state import migrate_state
-from curves import curves
-from dotenv import load_dotenv
-import os
+from tarot_commands.undo import undo
 
 load_dotenv()
 
@@ -37,14 +38,14 @@ def load_token():
     La source recommandée est la variable DISCORD_TOKEN (fichier .env, hors
     Git). Le config.json reste accepté en repli pour ne pas casser l'existant.
     """
-    token = os.getenv('DISCORD_TOKEN')
+    token = os.getenv("DISCORD_TOKEN")
     if token:
         return token
-    if os.path.isfile('config.json'):
-        with open('config.json', 'r') as f:
-            return json.load(f)['token']
+    if os.path.isfile("config.json"):
+        with open("config.json") as f:
+            return json.load(f)["token"]
     raise SystemExit(
-        'Aucun token Discord : définir DISCORD_TOKEN (fichier .env) '
+        "Aucun token Discord : définir DISCORD_TOKEN (fichier .env) "
         'ou fournir un config.json avec la clé "token".'
     )
 
@@ -56,12 +57,12 @@ try:
 except ValueError as exc:
     # Donnees incoherentes : rien n'a ete ecrit. Arret explicite plutot
     # qu'une trace brute a chaque redemarrage du conteneur.
-    raise SystemExit(f'Etat invalide dans players.json/history.json : {exc}')
+    raise SystemExit(f"Etat invalide dans players.json/history.json : {exc}") from exc
 
 intents = discord.Intents.default()
 intents.message_content = True
 
-bot = commands.Bot(intents=intents, command_prefix='t/', help_command=None)
+bot = commands.Bot(intents=intents, command_prefix="t/", help_command=None)
 
 bot.add_command(ping)
 bot.add_command(add_player)
@@ -90,11 +91,8 @@ async def on_command_error(ctx, error):
     if message is None:
         traced = error.original if isinstance(error, commands.CommandInvokeError) else error
         traceback.print_exception(type(traced), traced, traced.__traceback__)
-        name = ctx.command.name if ctx.command else 'help'
-        message = (
-            f'Erreur interne sur t/{name}, rien n’a été enregistré.\n'
-            f'{more_info(name)}'
-        )
+        name = ctx.command.name if ctx.command else "help"
+        message = f"Erreur interne sur t/{name}, rien n’a été enregistré.\n{more_info(name)}"
     await ctx.send(message)
 
 
@@ -107,8 +105,8 @@ async def on_message_edit(before, after):
         return
 
     action, payload = handle_edit_message_edit(after.id, after.content, after.author.id)
-    if action != 'ignore':
-        if action == 'updated':
+    if action != "ignore":
+        if action == "updated":
             session = payload
             content = confirm_message_content(session)
             view = EditOverwriteButton(session.request_message_id)
@@ -119,16 +117,16 @@ async def on_message_edit(before, after):
                 except discord.HTTPException:
                     await after.channel.send(content, view=view)
             return
-        if action == 'error':
-            await after.channel.send(error_message('edit', payload))
+        if action == "error":
+            await after.channel.send(error_message("edit", payload))
         return
 
     action, payload = handle_auto_edit(after.id, after.content, after.author.id)
 
-    if action == 'updated':
+    if action == "updated":
         session = payload
         content = confirm_message_content(session)
-        if session.kind == 'descendante' or session.reparse.startswith('Descendante:\n'):
+        if session.kind == "descendante" or session.reparse.startswith("Descendante:\n"):
             view = DescendanteCalculButton(session.request_message_id)
         else:
             view = GameCalculButton(session.request_message_id)
@@ -140,15 +138,15 @@ async def on_message_edit(before, after):
                 await after.channel.send(content, view=view)
         return
 
-    if action == 'error':
-        await after.channel.send(error_message('auto', payload))
+    if action == "error":
+        await after.channel.send(error_message("auto", payload))
         return
 
-    if action == 'warn':
+    if action == "warn":
         await after.channel.send(
-            f'L’édition de la partie {after.id} n’est pas prise en compte : '
-            'elle est déjà enregistrée. Pour corriger : `t/edit <id> …` '
-            '(bouton **Écraser**), ou `t/delete <id>` puis ressaisir.'
+            f"L’édition de la partie {after.id} n’est pas prise en compte : "
+            "elle est déjà enregistrée. Pour corriger : `t/edit <id> …` "
+            "(bouton **Écraser**), ou `t/delete <id>` puis ressaisir."
         )
 
 

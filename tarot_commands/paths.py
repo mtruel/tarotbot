@@ -9,9 +9,9 @@ def data_dir():
     repertoire de travail est le volume). On resout donc le chemin reel pour
     retomber sur le meme dossier dans les deux cas.
     """
-    for name in ('players.json', 'history.json', 'config.json'):
+    for name in ("players.json", "history.json", "config.json"):
         real = os.path.realpath(name)
         if os.path.isfile(real):
             return os.path.dirname(real)
     # Aucun fichier d'etat encore cree (clone neuf) : data/ si present, sinon cwd.
-    return 'data' if os.path.isdir('data') else '.'
+    return "data" if os.path.isdir("data") else "."

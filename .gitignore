@@ -1,6 +1,8 @@
 # cache
 __pycache__/
 tarot_commands/__pycache__/
+.ruff_cache/
+.venv/
 
 # tokens
 config.json

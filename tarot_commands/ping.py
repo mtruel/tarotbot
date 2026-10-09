@@ -6,4 +6,4 @@ async def ping(ctx):
     """
     pong!
     """
-    await ctx.send('pong!')
+    await ctx.send("pong!")

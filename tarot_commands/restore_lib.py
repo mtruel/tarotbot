@@ -27,19 +27,24 @@ from tarot_commands.backup_lib import (
     IGNORED_FILES,
     STATE_FILES,
     BackupError,
-    dump as _restic_dump,
     resolve_snapshot,
 )
-
+from tarot_commands.backup_lib import (
+    dump as _restic_dump,
+)
 from tarot_commands.state import (
-    check_legacy_scores, known_players, normalize_player_names, save_json, validate_history,
+    check_legacy_scores,
+    known_players,
+    normalize_player_names,
+    save_json,
+    validate_history,
 )
 
 # Nombre de dossiers _pre_restore_* conserves (les plus recents).
 MAX_PRE_RESTORE = 10
 
 # Refs restic designant « le dernier snapshot ».
-RESTIC_SOURCES = {'backup', 'restic', 'latest'}
+RESTIC_SOURCES = {"backup", "restic", "latest"}
 
 
 class RestoreError(Exception):
@@ -63,13 +68,13 @@ def _root_prefix(names):
     (prefixe + `Saison1_.../players.json`) restent ignores.
     """
     if any(name in STATE_FILES for name in names):
-        return ''
-    tops = {name.split('/', 1)[0] for name in names if '/' in name}
+        return ""
+    tops = {name.split("/", 1)[0] for name in names if "/" in name}
     if len(tops) == 1:
         top = tops.pop()
-        if any(name == f'{top}/{state}' for name in names for state in STATE_FILES):
-            return f'{top}/'
-    return ''
+        if any(name == f"{top}/{state}" for name in names for state in STATE_FILES):
+            return f"{top}/"
+    return ""
 
 
 def read_archive(path):
@@ -79,24 +84,24 @@ def read_archive(path):
     racine de l'archive. Leve RestoreError si l'archive est inutilisable.
     """
     if not os.path.isfile(path):
-        raise RestoreError(f'Archive introuvable : {path}')
+        raise RestoreError(f"Archive introuvable : {path}")
 
     try:
         zf = zipfile.ZipFile(path)
     except zipfile.BadZipFile:
-        raise RestoreError('Le fichier n\'est pas une archive zip valide.')
+        raise RestoreError("Le fichier n'est pas une archive zip valide.") from None
 
     with zf:
-        names = [n for n in zf.namelist() if not n.endswith('/')]
+        names = [n for n in zf.namelist() if not n.endswith("/")]
         prefix = _root_prefix(names)
         root_files = {}
         for name in names:
             if not name.startswith(prefix):
                 continue
-            relative = name[len(prefix):]
+            relative = name[len(prefix) :]
             # Seuls les fichiers directement sous le prefixe nous interessent :
             # un eventuel sous-dossier (saison) est ignore.
-            if '/' in relative:
+            if "/" in relative:
                 continue
             if os.path.basename(relative) in IGNORED_FILES:
                 continue
@@ -109,42 +114,38 @@ def read_archive(path):
 
 def _validate(root_files):
     """Valide history et la liste des joueurs facultative avant toute ecriture."""
-    if 'history.json' not in root_files:
-        raise RestoreError(
-            'Archive invalide : history.json est absent de la racine.'
-        )
+    if "history.json" not in root_files:
+        raise RestoreError("Archive invalide : history.json est absent de la racine.")
 
     data = {}
     for name in STATE_FILES:
         if name not in root_files:
             continue
         try:
-            data[name] = json.loads(root_files[name].decode('utf-8'))
+            data[name] = json.loads(root_files[name].decode("utf-8"))
         except (ValueError, UnicodeDecodeError) as exc:
-            raise RestoreError(
-                f'Archive invalide : {name} n\'est pas du JSON valide.'
-            ) from exc
+            raise RestoreError(f"Archive invalide : {name} n'est pas du JSON valide.") from exc
 
     try:
-        history = validate_history(data['history.json'])
-        raw_players = data.get('players.json', [])
+        history = validate_history(data["history.json"])
+        raw_players = data.get("players.json", [])
         player_names = normalize_player_names(raw_players)
         if isinstance(raw_players, dict):
             _check_consistency(raw_players, history)
-        data['players.json'] = known_players(history, player_names)
+        data["players.json"] = known_players(history, player_names)
     except ValueError as exc:
-        raise RestoreError(f'Archive invalide : {exc}') from exc
+        raise RestoreError(f"Archive invalide : {exc}") from exc
     return data
 
 
 def _normalize_ref(ref):
     """Traduit ``backup`` / ``restic`` / ``latest`` en « dernier snapshot »."""
     if ref is None or ref.strip().lower() in RESTIC_SOURCES:
-        return 'latest'
+        return "latest"
     return ref
 
 
-def read_snapshot(ref='latest'):
+def read_snapshot(ref="latest"):
     """Lit et valide un snapshot restic, sans rien ecrire.
 
     ``ref`` peut etre ``latest``, ``backup``, un id court ou complet. Leve
@@ -155,26 +156,24 @@ def read_snapshot(ref='latest'):
     try:
         snap = resolve_snapshot(ref)
     except BackupError as exc:
-        raise RestoreError(str(exc))
+        raise RestoreError(str(exc)) from exc
 
     if snap is None:
-        raise RestoreError(f'Snapshot restic introuvable : {ref}')
+        raise RestoreError(f"Snapshot restic introuvable : {ref}")
 
-    label = snap.get('short_id') or snap.get('id') or ref
+    label = snap.get("short_id") or snap.get("id") or ref
     root_files = {}
     for name in STATE_FILES:
         try:
-            raw = _restic_dump(snap['id'], name)
+            raw = _restic_dump(snap["id"], name)
         except BackupError as exc:
-            raise RestoreError(str(exc))
+            raise RestoreError(str(exc)) from exc
         if raw is None:
             continue
         root_files[name] = raw
 
     if not root_files:
-        raise RestoreError(
-            f'Snapshot {label} invalide : aucun fichier d\'etat a la racine.'
-        )
+        raise RestoreError(f"Snapshot {label} invalide : aucun fichier d'etat a la racine.")
     return _validate(root_files)
 
 
@@ -182,9 +181,9 @@ def _cleanup_pre_restore(dest_dir):
     """Ne conserve que les ``MAX_PRE_RESTORE`` dossiers _pre_restore_* recents."""
     try:
         entries = [
-            name for name in os.listdir(dest_dir)
-            if name.startswith('_pre_restore_')
-            and os.path.isdir(os.path.join(dest_dir, name))
+            name
+            for name in os.listdir(dest_dir)
+            if name.startswith("_pre_restore_") and os.path.isdir(os.path.join(dest_dir, name))
         ]
     except FileNotFoundError:
         return
@@ -197,8 +196,8 @@ def apply_restore(data, dest_dir):
 
     Retourne le chemin du dossier de snapshot cree.
     """
-    stamp = datetime.now().strftime('%Y%m%d_%H%M%S')
-    snapshot = os.path.join(dest_dir, f'_pre_restore_{stamp}')
+    stamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    snapshot = os.path.join(dest_dir, f"_pre_restore_{stamp}")
     os.makedirs(snapshot, exist_ok=True)
     for name in STATE_FILES:
         current = os.path.join(dest_dir, name)
