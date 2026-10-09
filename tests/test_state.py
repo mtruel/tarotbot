@@ -14,11 +14,18 @@ import zipfile
 
 from tarot_commands.state import (
     check_legacy_scores, compute_scores, known_players, load_history,
-    load_player_names, migrate_state, normalize_player_names, save_history, save_player_names,
+    load_player_names, migrate_state, migrate_related_message_ids,
+    normalize_player_names, save_history, save_player_names,
 )
 from tarot_commands.restore_lib import RestoreError, read_archive, read_snapshot, restore_archive
 from tarot_commands.export_lib import build_export
-from tarot_commands.history import update_history
+from tarot_commands.history import append_related_message_id, replace_history_entry, update_history
+from tarot_commands.sessions import find_history_by_message_id
+from tarot_commands.edit import (
+    handle_edit_message_edit,
+    resolve_edit_target,
+    strip_optional_auto_prefix,
+)
 from tarot_commands.undo import undo
 from tarot_commands.add_player import add_player, add_players
 from tarot_commands.new_season import new_season
@@ -67,16 +74,174 @@ class StateTests(unittest.TestCase):
         legacy = compute_scores()
         Path('players.json').write_text(json.dumps(legacy))
         Path('players_backup.json').write_text('{}')
-        before = Path('history.json').read_bytes()
+        before_scores = [dict(g['scores']) for g in load_history()]
         migrate_state()
         self.assertIsInstance(json.loads(Path('players.json').read_text()), list)
         self.assertEqual(compute_scores(), legacy)
-        self.assertEqual(Path('history.json').read_bytes(), before)
+        history = load_history()
+        self.assertEqual([g['scores'] for g in history], before_scores)
+        for entry in history:
+            self.assertEqual(entry.get('related_message_ids'), [])
         backups = list(Path('.').glob('_pre_migration_*'))
         self.assertEqual(len(backups), 1)
         self.assertEqual(json.loads((backups[0] / 'players.json').read_text()), legacy)
         migrate_state()
         self.assertEqual(len(list(Path('.').glob('_pre_migration_*'))), 1)
+
+    def test_related_message_ids_migration_lookup_replace(self):
+        history = [
+            {
+                'time': '01/10/2026, 12:00:00',
+                'message_id': 100001,
+                'type': 'partie',
+                'scores': {'Alice': 40, 'Bob': -20, 'Carol': -20},
+            },
+            {
+                'time': '01/10/2026, 13:00:00',
+                'message_id': 100002,
+                'related_message_ids': [200002],
+                'type': 'partie',
+                'scores': {'Alice': -10, 'Bob': 20, 'Carol': -10},
+            },
+        ]
+        save_history(history)
+        self.assertTrue(migrate_related_message_ids(history))
+        self.assertEqual(history[0]['related_message_ids'], [])
+        self.assertFalse(migrate_related_message_ids(history))
+        save_history(history)
+
+        migrate_state()
+        loaded = load_history()
+        self.assertEqual(loaded[0]['related_message_ids'], [])
+        self.assertEqual(loaded[1]['related_message_ids'], [200002])
+
+        self.assertIs(find_history_by_message_id(loaded, 100001), loaded[0])
+        self.assertIs(find_history_by_message_id(loaded, 200002), loaded[1])
+        self.assertIsNone(find_history_by_message_id(loaded, 999999))
+
+        replaced = replace_history_entry(
+            200002,
+            {'Alice': 5, 'Bob': -5, 'Carol': 0},
+            {
+                'message_id': 999,
+                'type': 'partie',
+                'preneur': 'Alice',
+                'partenaire': None,
+                'defenseurs': ['Bob', 'Carol'],
+                'bouts': 1,
+                'points_attaque': 50,
+                'enchere': 'Garde',
+                'multiplicateur': 2,
+                'primes_attaque': [],
+                'primes_defense': [],
+                'miseres': [],
+            },
+        )
+        self.assertIsNotNone(replaced)
+        self.assertEqual(replaced['message_id'], 100002)
+        self.assertEqual(replaced['time'], '01/10/2026, 13:00:00')
+        self.assertEqual(replaced['related_message_ids'], [200002])
+        self.assertEqual(replaced['scores']['Alice'], 5)
+        self.assertEqual(replaced['points_attaque'], 50)
+
+        self.assertTrue(append_related_message_id(100002, 300002))
+        entry = find_history_by_message_id(load_history(), 100002)
+        self.assertEqual(entry['related_message_ids'], [200002, 300002])
+
+        before = load_history()
+        self.assertIsNone(replace_history_entry(
+            404404,
+            {'Alice': 1},
+            {'type': 'partie', 'message_id': 404404},
+        ))
+        self.assertEqual(load_history(), before)
+        self.assertFalse(append_related_message_id(404404, 1))
+
+    def test_resolve_edit_target(self):
+        self.assertEqual(
+            resolve_edit_target('1557730091864301699 Alice garde 50 2 vs Bob', None),
+            (1557730091864301699, 'Alice garde 50 2 vs Bob'),
+        )
+        self.assertEqual(
+            resolve_edit_target(
+                '1557730091864301699 t/auto Alice garde 50 2 vs Bob',
+                111,
+            ),
+            (1557730091864301699, 'Alice garde 50 2 vs Bob'),
+        )
+        self.assertEqual(
+            resolve_edit_target('Alice garde 50 2 vs Bob', 222),
+            (222, 'Alice garde 50 2 vs Bob'),
+        )
+        self.assertEqual(resolve_edit_target('', None), (None, None))
+        self.assertEqual(resolve_edit_target('pas un id', None), (None, None))
+        self.assertEqual(strip_optional_auto_prefix('t/auto Alice garde 45 2 vs Bob'),
+                         'Alice garde 45 2 vs Bob')
+
+    def test_handle_edit_message_edit_pending(self):
+        game.reset_cache()
+        save_history([{
+            'time': '01/10/2026, 12:00:00',
+            'message_id': 1557730091864301699,
+            'related_message_ids': [],
+            'type': 'partie',
+            'scores': {'Alice': 40, 'Bob': -20, 'Carol': -20},
+        }])
+        session = game.create_session(400, author_id=42, source='edit')
+        session.edit_target_message_id = 1557730091864301699
+        game.autoparse('Alice garde 45 2 vs Bob Carol', session)
+        session.confirm_message_id = 888
+        old_reparse = session.reparse
+
+        action, payload = handle_edit_message_edit(
+            400,
+            't/edit 1557730091864301699 Alice garde 45 2 vs Bob Carol',
+            42,
+        )
+        self.assertEqual(action, 'noop')
+        self.assertEqual(session.reparse, old_reparse)
+
+        action, payload = handle_edit_message_edit(
+            400,
+            't/edit 1557730091864301699 Alice garde 50 2 vs Bob Carol',
+            42,
+        )
+        self.assertEqual(action, 'updated')
+        self.assertEqual(payload.points_attaque, 50)
+        self.assertEqual(session.edit_target_message_id, 1557730091864301699)
+
+        # Changer l'id dans le texte ne change pas la cible ; seul le corps est re-parse.
+        action, payload = handle_edit_message_edit(
+            400,
+            't/edit 9999999999999999999 Bob petite 56 3 vs Alice Carol',
+            42,
+        )
+        self.assertEqual(action, 'updated')
+        self.assertEqual(payload.game_players['Preneur'], ['Bob'])
+        self.assertEqual(session.edit_target_message_id, 1557730091864301699)
+
+        action, payload = handle_edit_message_edit(
+            400,
+            't/edit 1557730091864301699 Alice garde 50 2 vs Bob Carol',
+            99,
+        )
+        self.assertEqual(action, 'ignore')
+
+        action, payload = handle_edit_message_edit(
+            400,
+            't/edit 1557730091864301699 pas un parse valide',
+            42,
+        )
+        self.assertEqual(action, 'error')
+
+        game.pop_session(400)
+        action, payload = handle_edit_message_edit(
+            400,
+            't/edit 1557730091864301699 Alice garde 60 1 vs Bob Carol',
+            42,
+        )
+        self.assertEqual(action, 'ignore')
+        game.reset_cache()
 
     def test_migration_refuses_inconsistency_without_changes(self):
         Path('players.json').write_text('{"Alice":999}')
@@ -197,16 +362,26 @@ class StateTests(unittest.TestCase):
             expected = game.calcul_scores(session)
             view = game.GameCalculButton(10)
             interaction = AsyncMock()
+            score_msg = AsyncMock()
+            score_msg.id = 900010
+            interaction.followup.send = AsyncMock(return_value=score_msg)
             await view.children[0].callback(interaction)
-            self.assertEqual(load_history()[-1]['scores'], expected)
+            entry = load_history()[-1]
+            self.assertEqual(entry['scores'], expected)
+            self.assertEqual(entry['related_message_ids'], [900010])
+            self.assertIn('id: `10`', interaction.followup.send.call_args.args[0])
             self.assertEqual(compute_scores()['Alice'], 30 + expected['Alice'])
             self.assertTrue(view.children[0].disabled)
             self.assertEqual(load_player_names(), ['Alice', 'Bob', 'Carol', 'SansPartie'])
             session = game.create_session(11, source='auto')
             game.autoparse('descendante Alice 20 Bob 20 Carol 51', session)
             view = game.DescendanteCalculButton(11)
+            score_msg2 = AsyncMock()
+            score_msg2.id = 900011
+            interaction.followup.send = AsyncMock(return_value=score_msg2)
             await view.children[0].callback(interaction)
             self.assertEqual(len(load_history()), 4)
+            self.assertEqual(load_history()[-1]['related_message_ids'], [900011])
             self.assertTrue(view.children[0].disabled)
             self.assertFalse(Path('players_backup.json').exists())
             game.reset_cache()

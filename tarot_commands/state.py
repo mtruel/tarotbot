@@ -123,10 +123,27 @@ def check_legacy_scores(players, history):
         )
 
 
+def migrate_related_message_ids(history):
+    """Ajoute related_message_ids: [] aux entrees qui n'ont pas encore la cle.
+
+    Returns
+    -------
+    bool
+        True si au moins une entree a ete modifiee.
+    """
+    changed = False
+    for entry in history:
+        if 'related_message_ids' not in entry:
+            entry['related_message_ids'] = []
+            changed = True
+    return changed
+
+
 def migrate_state():
     """Initialise les fichiers ou migre la liste des joueurs, apres validation et copie."""
     history_exists = os.path.isfile('history.json')
     history = load_history() if history_exists else []
+    related_changed = migrate_related_message_ids(history)
     players_exists = os.path.isfile('players.json')
     raw = _read_json('players.json') if players_exists else []
     player_names = known_players(history, normalize_player_names(raw))
@@ -142,8 +159,10 @@ def migrate_state():
             if os.path.isfile(name):
                 shutil.copy2(name, os.path.join(backup, name))
         print(f'Migration players.json : sauvegarde dans {backup}')
-    if not history_exists:
+    if not history_exists or related_changed:
         save_history(history)
+        if related_changed:
+            print('history.json : related_message_ids ajoute aux anciennes parties.')
     if not players_exists or legacy or player_names != raw:
         save_player_names(player_names)
         print(f'players.json : liste de {len(player_names)} joueurs, points depuis history.json.')

@@ -3,7 +3,7 @@ from discord.ext import commands
 from tarot_commands.rules import CONTRAT_PAR_BOUT, PRIMES
 from table2ascii import table2ascii as t2a
 from tarot_commands.state import known_players, load_history
-from tarot_commands.history import update_history
+from tarot_commands.history import append_related_message_id, update_history
 from tarot_commands.help import error_message
 from tarot_commands.sessions import (
     GameSession,
@@ -280,6 +280,102 @@ class SelectViewPrimes(discord.ui.View):
         self.add_item(SelectPlayers('Misères', '😇️', request_message_id))
 
 
+def finalize_partie_scores(session: GameSession):
+    """Valide une partie et calcule les scores.
+
+    Returns
+    -------
+    (scores, None) ou (None, message_erreur)
+    """
+    if not session.game_players['Preneur']:
+        return None, 'Preneur?'
+
+    if len(session.game_players['Défenseurs']) < 2:
+        return None, 'Pas assez de défenseurs.'
+
+    if session.game_players['Preneur'][0] in session.game_players['Défenseurs']:
+        return None, 'Le Preneur défend aussi?'
+
+    if session.game_players['Partenaire'] and \
+            session.game_players['Partenaire'][0] in session.game_players['Défenseurs']:
+        return None, 'Le Partenaire défend aussi?.'
+
+    if session.game_players['Partenaire'] and \
+            session.game_players['Partenaire'][0] in session.game_players['Preneur']:
+        return None, 'Le Partenaire est Preneur?.'
+
+    n_players = len(session.game_players['Preneur'] + session.game_players['Partenaire'] +
+                    session.game_players['Défenseurs'])
+
+    if n_players not in [3, 4, 5]:
+        return None, 'Le Tarot ne se joue pas à {}.'.format(n_players)
+
+    if session.game_players['Partenaire'] and n_players != 5:
+        return None, 'Pas de partenaire à moins de 5.'
+
+    n_chelem_tot = 0
+    for x in [session.primes_attaque, session.primes_defense]:
+        if x:
+            n_poignees = 0
+            n_chelem = 0
+            for p in x:
+                if 'Poignée' in p:
+                    n_poignees += 1
+                if 'Chelem' in p:
+                    n_chelem += 1
+            if n_poignees > 1:
+                return None, "Plus d'un type de Poignée."
+            if n_chelem > 1:
+                return None, "Plus d'un type de Chelem."
+            if n_chelem == 1:
+                n_chelem_tot += 1
+
+    if n_chelem_tot > 1:
+        return None, "Un chelem par équipe."
+
+    if session.primes_attaque and session.primes_defense:
+        if "Petit au bout" in session.primes_attaque and "Petit au bout" in session.primes_defense:
+            return None, 'Un seul Petit.'
+
+    if session.bouts is None:
+        session.bouts = 0
+
+    if not session.enchere:
+        return None, 'Pas de réponse pour les enchères.'
+
+    for player in session.miseres:
+        if not (player in session.game_players['Preneur'] or player in session.game_players['Partenaire']
+                or player in session.game_players['Défenseurs']):
+            return None, 'Le joueur {} est listé dans les misères mais ne joue pas.'.format(player)
+
+    return calcul_scores(session), None
+
+
+def finalize_descendante_scores(session: GameSession):
+    """Valide une descendante et calcule les scores.
+
+    Returns
+    -------
+    (scores, None) ou (None, message_erreur)
+    """
+    n_players = sum([bool(v) for v in session.descendante_players.values()])
+
+    if n_players != len(session.descendante_points):
+        return None, 'Merci de remplir toutes les entrées.'
+
+    test_unique_dict = {player: 0 for player in session.descendante_players.values() if player}
+    if len(test_unique_dict) != n_players:
+        return None, 'Liste de joueurs non injective.'
+
+    for player in session.miseres:
+        if player not in [p for p in session.descendante_players.values() if p]:
+            return None, 'Le joueur {} est listé dans les misères mais ne joue pas.'.format(player)
+
+    scores = calcul_score_descendante(session.descendante_players, session.descendante_points)
+    scores = affecte_miseres(scores, session)
+    return scores, None
+
+
 class GameCalculButton(discord.ui.View):
     def __init__(self, request_message_id, *, timeout=180):
         super().__init__(timeout=timeout)
@@ -299,87 +395,17 @@ class GameCalculButton(discord.ui.View):
             await interaction.response.send_message(EXPIRED_MSG)
             return
 
-        if not session.game_players['Preneur']:
-            await interaction.response.send_message('Preneur?')
+        scores, err = finalize_partie_scores(session)
+        if err:
+            await interaction.response.send_message(err)
             return
 
-        if len(session.game_players['Défenseurs']) < 2:
-            await interaction.response.send_message('Pas assez de défenseurs.')
-            return
-
-        if session.game_players['Preneur'][0] in session.game_players['Défenseurs']:
-            await interaction.response.send_message('Le Preneur défend aussi?')
-            return
-
-        if session.game_players['Partenaire'] and \
-                session.game_players['Partenaire'][0] in session.game_players['Défenseurs']:
-            await interaction.response.send_message('Le Partenaire défend aussi?.')
-            return
-
-        if session.game_players['Partenaire'] and \
-                session.game_players['Partenaire'][0] in session.game_players['Preneur']:
-            await interaction.response.send_message('Le Partenaire est Preneur?.')
-            return
-
-        n_players = len(session.game_players['Preneur'] + session.game_players['Partenaire'] +
-                        session.game_players['Défenseurs'])
-
-        if n_players not in [3, 4, 5]:
-            await interaction.response.send_message('Le Tarot ne se joue pas à {}.'.format(n_players))
-            return
-
-        if session.game_players['Partenaire'] and n_players != 5:
-            await interaction.response.send_message('Pas de partenaire à moins de 5.')
-            return
-
-        n_chelem_tot = 0
-        for x in [session.primes_attaque, session.primes_defense]:
-            if x:
-                n_poignees = 0
-                n_chelem = 0
-                for p in x:
-                    if 'Poignée' in p:
-                        n_poignees += 1
-                    if 'Chelem' in p:
-                        n_chelem += 1
-                if n_poignees > 1:
-                    await interaction.response.send_message("Plus d'un type de Poignée.")
-                    return
-                if n_chelem > 1:
-                    await interaction.response.send_message("Plus d'un type de Chelem.")
-                    return
-                if n_chelem == 1:
-                    n_chelem_tot += 1
-
-        if n_chelem_tot > 1:
-            await interaction.response.send_message("Un chelem par équipe.")
-            return
-
-        if session.primes_attaque and session.primes_defense:
-            if "Petit au bout" in session.primes_attaque and "Petit au bout" in session.primes_defense:
-                await interaction.response.send_message('Un seul Petit.')
-                return
-
-        if session.bouts is None:
-            session.bouts = 0
-
-        if not session.enchere:
-            await interaction.response.send_message('Pas de réponse pour les enchères.')
-            return
-
-        for player in session.miseres:
-            if not (player in session.game_players['Preneur'] or player in session.game_players['Partenaire']
-                    or player in session.game_players['Défenseurs']):
-                await interaction.response.send_message(
-                    'Le joueur {} est listé dans les misères mais ne joue pas.'.format(player))
-                return
-
-        scores = calcul_scores(session)
+        game_id = session.request_message_id
         update_history(scores, partie_details(session))
         button.disabled = True  # After updating the score!
         pop_session(self.request_message_id)
         await interaction.response.edit_message(view=self)
-        await interaction.followup.send(f"```\n{get_score_table_string(scores)}\n```")
+        await send_score_table(interaction, scores, game_id)
 
 
 class DescendanteCalculButton(discord.ui.View):
@@ -401,30 +427,17 @@ class DescendanteCalculButton(discord.ui.View):
             await interaction.response.send_message(EXPIRED_MSG)
             return
 
-        n_players = sum([bool(v) for v in session.descendante_players.values()])
-
-        if n_players != len(session.descendante_points):
-            await interaction.response.send_message('Merci de remplir toutes les entrées.')
+        scores, err = finalize_descendante_scores(session)
+        if err:
+            await interaction.response.send_message(err)
             return
 
-        test_unique_dict = {player: 0 for player in session.descendante_players.values() if player}
-        if len(test_unique_dict) != n_players:
-            await interaction.response.send_message('Liste de joueurs non injective.')
-            return
-
-        for player in session.miseres:
-            if player not in [p for p in session.descendante_players if p]:
-                await interaction.response.send_message(
-                    'Le joueur {} est listé dans les misères mais ne joue pas.'.format(player))
-                return
-
-        scores = calcul_score_descendante(session.descendante_players, session.descendante_points)
-        scores = affecte_miseres(scores, session)
+        game_id = session.request_message_id
         update_history(scores, descendante_details(session))
         button.disabled = True  # After updating the score!
         pop_session(self.request_message_id)
         await interaction.response.edit_message(view=self)
-        await interaction.followup.send(f"```\n{get_score_table_string(scores)}\n```")
+        await send_score_table(interaction, scores, game_id)
 
 
 @commands.command()
@@ -591,6 +604,23 @@ def get_score_table_string(scores):
         first_col_heading=True
     )
     return output
+
+
+def format_score_table_message(scores, game_id):
+    """Tableau ASCII + id canonique en sous-texte Discord (gris, copiable)."""
+    return (
+        f"```\n{get_score_table_string(scores)}\n```\n"
+        f"-# id: `{game_id}`"
+    )
+
+
+async def send_score_table(interaction, scores, game_id):
+    """Envoie le tableau et enregistre l'id du message dans related_message_ids."""
+    msg = await interaction.followup.send(format_score_table_message(scores, game_id))
+    score_msg_id = getattr(msg, 'id', None)
+    if score_msg_id is not None:
+        append_related_message_id(game_id, score_msg_id)
+    return msg
 
 
 def affecte_miseres(scores, session: GameSession):

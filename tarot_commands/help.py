@@ -103,6 +103,21 @@ COMMANDS = [
         'Irréversible sans accès aux fichiers sur le serveur.',
     ),
     (
+        'edit',
+        't/edit <id> <commande auto>  |  (réponse) t/edit <commande auto>',
+        'écrase une partie déjà enregistrée',
+        'Remplace une partie de l’historique par un nouveau parse (même syntaxe que '
+        '`t/auto`). Affiche un récapitulatif à valider avec le bouton **Écraser**.\n'
+        'Cible : l’id affiché sous le tableau de scores, ou une réponse au message '
+        'de commande / au tableau.\n'
+        'Tant que **Écraser** n’a pas été cliqué, modifier le message `t/edit` met à '
+        'jour le récapitulatif (sans changer la partie ciblée).\n'
+        'Exemples :\n'
+        '`t/edit 1557730091864301699 Alice garde 50 2 vs Bob Carol`\n'
+        'en réponse : `t/edit Alice garde 50 2 vs Bob Carol`\n'
+        'Le préfixe `t/auto` dans le corps est optionnel.',
+    ),
+    (
         'new_season',
         't/new_season IAMSURE',
         'archive la saison et repart à zéro',
@@ -245,6 +260,10 @@ def _missing_text(name):
         'auto': (
             'Il manque la description de la partie. '
             'Exemple : `t/auto Alice garde 45 2 vs Bob Carol`'
+        ),
+        'edit': (
+            'Indique l’id de la partie et le nouveau contenu, ou réponds au message.\n'
+            'Exemple : `t/edit 1557730091864301699 Alice garde 50 2 vs Bob Carol`'
         ),
         'scores_descendante': (
             'Il manque le nombre de joueurs (3, 4 ou 5). '

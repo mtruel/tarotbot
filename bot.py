@@ -17,6 +17,7 @@ from tarot_commands.game import (
 )
 from tarot_commands.rules import poignees, contrats, scores_descendante
 from tarot_commands.undo import undo
+from tarot_commands.edit import EditOverwriteButton, edit, handle_edit_message_edit
 from tarot_commands.new_season import new_season
 from tarot_commands.help import explain_command_error, help, more_info, error_message
 from tarot_commands.export import export
@@ -66,6 +67,7 @@ bot.add_command(add_player)
 bot.add_command(leaderboard)
 bot.add_command(leaderboard2)
 bot.add_command(undo)
+bot.add_command(edit)
 bot.add_command(game)
 bot.add_command(descendante)
 bot.add_command(poignees)
@@ -96,10 +98,27 @@ async def on_command_error(ctx, error):
 
 @bot.event
 async def on_message_edit(before, after):
-    """Re-parse t/auto si la saisie est encore pending ; avertit si deja enregistree."""
+    """Re-parse t/auto ou t/edit si la saisie est encore pending ; avertit si deja enregistree."""
     if after.author.bot:
         return
     if before.content == after.content:
+        return
+
+    action, payload = handle_edit_message_edit(after.id, after.content, after.author.id)
+    if action != 'ignore':
+        if action == 'updated':
+            session = payload
+            content = confirm_message_content(session)
+            view = EditOverwriteButton(session.request_message_id)
+            if session.confirm_message_id and after.channel:
+                try:
+                    confirm = await after.channel.fetch_message(session.confirm_message_id)
+                    await confirm.edit(content=content, view=view)
+                except discord.HTTPException:
+                    await after.channel.send(content, view=view)
+            return
+        if action == 'error':
+            await after.channel.send(error_message('edit', payload))
         return
 
     action, payload = handle_auto_edit(after.id, after.content, after.author.id)

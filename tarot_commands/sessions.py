@@ -21,9 +21,10 @@ class GameSession:
     channel_id: Optional[int] = None
     author_id: Optional[int] = None
     confirm_message_id: Optional[int] = None
+    edit_target_message_id: Optional[int] = None
     view_generation: int = 0
     kind: str = 'partie'  # 'partie' | 'descendante'
-    source: str = 'auto'  # 'auto' | 'game' | 'descendante'
+    source: str = 'auto'  # 'auto' | 'game' | 'descendante' | 'edit'
     reparse: str = ''
     enchere: Optional[int] = None
     game_players: dict = field(default_factory=_empty_game_players)
@@ -156,7 +157,21 @@ def semantic_from_history(entry: dict[str, Any]) -> Optional[tuple]:
 
 
 def find_history_by_message_id(history: list, message_id: int) -> Optional[dict]:
+    """Trouve une partie par id canonique ou id de message tableau (related)."""
     for entry in history:
         if entry.get('message_id') == message_id:
             return entry
+        related = entry.get('related_message_ids') or []
+        if message_id in related:
+            return entry
+    return None
+
+
+def find_history_index_by_message_id(history: list, message_id: int) -> Optional[int]:
+    for index, entry in enumerate(history):
+        if entry.get('message_id') == message_id:
+            return index
+        related = entry.get('related_message_ids') or []
+        if message_id in related:
+            return index
     return None
