@@ -16,8 +16,9 @@ from tarot_commands.game import (
     DescendanteCalculButton,
 )
 from tarot_commands.rules import poignees, contrats, scores_descendante
-from tarot_commands.undo import undo
+from tarot_commands.delete import delete
 from tarot_commands.edit import EditOverwriteButton, edit, handle_edit_message_edit
+from tarot_commands.undo import undo
 from tarot_commands.new_season import new_season
 from tarot_commands.help import explain_command_error, help, more_info, error_message
 from tarot_commands.export import export
@@ -66,8 +67,9 @@ bot.add_command(ping)
 bot.add_command(add_player)
 bot.add_command(leaderboard)
 bot.add_command(leaderboard2)
-bot.add_command(undo)
+bot.add_command(delete)
 bot.add_command(edit)
+bot.add_command(undo)
 bot.add_command(game)
 bot.add_command(descendante)
 bot.add_command(poignees)
@@ -145,8 +147,8 @@ async def on_message_edit(before, after):
     if action == 'warn':
         await after.channel.send(
             f'L’édition de la partie {after.id} n’est pas prise en compte : '
-            'elle est déjà enregistrée. Pour annuler la dernière partie : '
-            '`t/undo IAMSURE`, puis ressaisis avec `t/auto`.'
+            'elle est déjà enregistrée. Pour corriger : `t/edit <id> …` '
+            '(bouton **Écraser**), ou `t/delete <id>` puis ressaisir.'
         )
 
 

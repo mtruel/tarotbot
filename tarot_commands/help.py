@@ -94,15 +94,6 @@ COMMANDS = [
         'Exemple : `t/descendante 20 20 51`',
     ),
     (
-        'undo',
-        't/undo IAMSURE',
-        'annule la dernière partie',
-        'Retire la dernière partie de l’historique ; les points sont recalculés.\n'
-        'Peut être répété tant que l’historique n’est pas vide.\n'
-        'Sans IAMSURE, le bot demande confirmation et ne change rien.\n'
-        'Irréversible sans accès aux fichiers sur le serveur.',
-    ),
-    (
         'edit',
         't/edit <id> <commande auto>  |  (réponse) t/edit <commande auto>',
         'écrase une partie déjà enregistrée',
@@ -116,6 +107,28 @@ COMMANDS = [
         '`t/edit 1557730091864301699 Alice garde 50 2 vs Bob Carol`\n'
         'en réponse : `t/edit Alice garde 50 2 vs Bob Carol`\n'
         'Le préfixe `t/auto` dans le corps est optionnel.',
+    ),
+    (
+        'delete',
+        't/delete <id>  |  (réponse) t/delete',
+        'supprime une partie de l’historique',
+        'Retire une partie ciblée ; les points sont recalculés.\n'
+        'Cible : l’id affiché sous le tableau de scores, ou une réponse au message '
+        'de commande / au tableau.\n'
+        'Affiche un récapitulatif, puis demande de confirmer en tapant exactement '
+        '`oui supprime` (60 s).\n'
+        'Exemples :\n'
+        '`t/delete 1557730091864301699`\n'
+        'en réponse : `t/delete`\n'
+        'Irréversible sans accès aux fichiers sur le serveur.',
+    ),
+    (
+        'undo',
+        't/undo',
+        'remplacé par t/delete / t/edit',
+        '`t/undo` n’annule plus de partie.\n'
+        'Utiliser `t/delete <id>` pour supprimer, ou `t/edit <id> …` pour corriger.\n'
+        'Voir `t/help delete` et `t/help edit`.',
     ),
     (
         'new_season',
@@ -265,6 +278,10 @@ def _missing_text(name):
             'Indique l’id de la partie et le nouveau contenu, ou réponds au message.\n'
             'Exemple : `t/edit 1557730091864301699 Alice garde 50 2 vs Bob Carol`'
         ),
+        'delete': (
+            'Indique l’id de la partie, ou réponds au message (commande / tableau).\n'
+            'Exemple : `t/delete 1557730091864301699`'
+        ),
         'scores_descendante': (
             'Il manque le nombre de joueurs (3, 4 ou 5). '
             'Exemple : `t/scores_descendante 4`'
@@ -292,7 +309,6 @@ def _too_many_text(name):
         'scores_descendante': (
             'Un seul nombre de joueurs : 3, 4 ou 5. Exemple : `t/scores_descendante 4`'
         ),
-        'undo': 'Pour confirmer : `t/undo IAMSURE`',
         'new_season': 'Pour confirmer : `t/new_season IAMSURE`',
         'ping': '`t/ping` ne prend pas d’argument.',
         'leaderboard': '`t/leaderboard` ne prend pas d’argument.',
@@ -300,6 +316,10 @@ def _too_many_text(name):
         'contrats': '`t/contrats` ne prend pas d’argument.',
         'curves': '`t/curves` ne prend pas d’argument.',
         'export': '`t/export` ou `t/export backup` — aucun autre argument.',
+        'delete': (
+            'Usage : `t/delete <id>`, ou `t/delete` en réponse au message. '
+            'Confirmer ensuite avec `oui supprime`.'
+        ),
         'restore': (
             'Usage : `t/restore IAMSURE` avec une archive `.zip` en pièce jointe, '
             'ou `t/restore IAMSURE backup` pour le dernier snapshot restic.'

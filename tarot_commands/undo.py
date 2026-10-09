@@ -1,25 +1,16 @@
-from discord.ext import commands
+"""Ancien t/undo : ne fait plus rien, redirige vers t/delete / t/edit."""
 
-from tarot_commands.help import error_message
-from tarot_commands.state import load_history, save_history
+from discord.ext import commands
 
 
 @commands.command()
-async def undo(ctx, s='no'):
-    """Retire la derniere partie de l'historique (IRREVERSIBLE)."""
-    if s != 'IAMSURE':
-        await ctx.send(error_message(
-            'undo',
-            'Pour annuler la dernière partie : `t/undo IAMSURE`',
-        ))
-        return
-
-    history = load_history()
-    if not history:
-        await ctx.send(error_message(
-            'undo', 'Aucune partie à annuler : l’historique est vide.',
-        ))
-        return
-
-    save_history(history[:-1])
-    await ctx.send('Undo successful!')
+async def undo(ctx, *args):
+    """Remplacé par t/delete et t/edit."""
+    await ctx.send(
+        '`t/undo` n’existe plus.\n'
+        'Pour supprimer une partie : `t/delete <id>` '
+        '(ou en réponse au message / tableau), puis confirme avec `oui supprime`.\n'
+        'Pour corriger une partie : `t/edit <id> …` '
+        '(bouton **Écraser**).\n'
+        '`t/help delete` · `t/help edit`'
+    )

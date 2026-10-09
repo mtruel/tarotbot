@@ -107,8 +107,8 @@ Toutes les commandes enregistrées dans [`bot.py`](bot.py) :
 | `t/game <points>` | Saisie d’une partie via menus (enchère, bouts, primes, misères) |
 | `t/auto <message>` | Saisie d’une partie en texte libre (voir syntaxe ci-dessous) |
 | `t/descendante <p1> <p2> ...` | Saisie d’une descendante (points par joueur, puis noms via menus) |
-| `t/undo IAMSURE` | Annule la dernière partie (retirée de l’historique, points recalculés) |
 | `t/edit <id> <auto…>` | Écrase une partie déjà enregistrée (ou en réponse à un message lié) |
+| `t/delete <id>` | Supprime une partie (récap + confirmation `oui supprime` ; ou en réponse) |
 | `t/new_season IAMSURE` | Archive la saison courante dans un dossier daté et repart à zéro |
 | `t/poignees [n]` | Rappel des seuils de poignée selon le nombre de joueurs (défaut `5`) |
 | `t/contrats` | Rappel des points à atteindre selon le nombre de bouts |
@@ -144,12 +144,12 @@ t/leaderboard2
 # Courbes de progression
 t/curves
 
-# Annuler la dernière saisie / démarrer une nouvelle saison
-t/undo IAMSURE
+# Démarrer une nouvelle saison
 t/new_season IAMSURE
 
-# Corriger une partie (id sous le tableau, ou réponse au message)
+# Corriger / supprimer une partie (id sous le tableau, ou réponse au message)
 t/edit 1557730091864301699 Alice garde 50 2 vs Bob Carol
+t/delete 1557730091864301699
 
 # Rappels de règles
 t/contrats
@@ -161,7 +161,7 @@ t/scores_descendante 4
 
 Le parseur ([`game.autoparse`](tarot_commands/game.py)) accepte une phrase, puis affiche un récapitulatif à valider avec le bouton **Calcul**.
 
-Édition du message `t/auto` : tant que **Calcul** n’a pas été cliqué, modifier le message met à jour le récapitulatif si le parse change. Une fois la partie enregistrée, une édition du même message est ignorée (avertissement dans le salon) — utiliser `t/edit <id> …` (ou une réponse au message / tableau) avec le bouton **Écraser**, ou `t/undo IAMSURE` pour la dernière partie. Tant que **Écraser** n’a pas été cliqué, modifier le message `t/edit` met à jour le récapitulatif (la cible d’origine est conservée). Plusieurs `t/auto` peuvent être ouverts en parallèle. L’id de partie s’affiche sous chaque tableau de scores.
+Édition du message `t/auto` : tant que **Calcul** n’a pas été cliqué, modifier le message met à jour le récapitulatif si le parse change. Une fois la partie enregistrée, une édition du même message est ignorée (avertissement dans le salon) — utiliser `t/edit <id> …` (ou une réponse au message / tableau) avec le bouton **Écraser**, ou `t/delete <id>` puis ressaisir. Tant que **Écraser** n’a pas été cliqué, modifier le message `t/edit` met à jour le récapitulatif (la cible d’origine est conservée). Plusieurs `t/auto` peuvent être ouverts en parallèle. L’id de partie s’affiche sous chaque tableau de scores.
 
 Syntaxe imposée :
 
@@ -206,7 +206,7 @@ Tous les fichiers d’état vivent dans `data/` et sont **exclus de Git** par [`
 - `history.json` : liste des parties avec date, détails et scores (`{"time": "JJ/MM/AAAA, HH:MM:SS", "scores": {...}}`). **Seule source des points** : les classements et courbes additionnent ces scores à la demande.
 - `curves.png` : courbe régénérée par `t/curves`.
 
-Les joueurs inscrits sans partie apparaissent avec 0 point. Les noms présents uniquement dans l’historique sont aussi reconnus. `t/undo IAMSURE` retire la dernière partie ; on peut répéter la commande jusqu’à vider l’historique, sans modifier la liste des joueurs. `players_backup.json` n’est plus utilisé ; les anciennes archives peuvent encore le contenir.
+Les joueurs inscrits sans partie apparaissent avec 0 point. Les noms présents uniquement dans l’historique sont aussi reconnus. `t/delete <id>` (ou en réponse) retire une partie après confirmation `oui supprime` ; les totaux sont recalculés, sans modifier la liste des joueurs. `players_backup.json` n’est plus utilisé ; les anciennes archives peuvent encore le contenir.
 
 Formats JSON indicatifs :
 
@@ -399,10 +399,11 @@ tarobot-imb/
 │   ├── state.py               # liste des joueurs, calcul des totaux, migration et écritures atomiques
 │   ├── game.py                # t/game, t/descendante, t/auto + calcul des scores
 │   ├── rules.py               # constantes (poignées, contrats, primes) + t/poignees/contrats/scores_descendante
-│   ├── undo.py                # t/undo
 │   ├── edit.py                # t/edit (écraser une partie)
+│   ├── delete.py              # t/delete (supprimer une partie)
+│   ├── undo.py                # t/undo (redirige vers delete / edit)
 │   ├── new_season.py          # t/new_season
-│   ├── history.py             # écriture / remplacement de history.json
+│   ├── history.py             # écriture / remplacement / suppression de history.json
 │   ├── export.py              # t/export, t/export backup (dépôt restic complet)
 │   ├── export_lib.py          # construction des zips de données (sans discord)
 │   ├── restore.py             # t/restore (restauration avec confirmation)
@@ -424,11 +425,11 @@ docker compose run --rm -v "$PWD/tests:/tests:ro" \
   --entrypoint python tarotbot -m unittest discover -s /tests -v
 ```
 
-Ils couvrent les totaux, la liste des joueurs, la migration, les écritures atomiques (droits conservés, liens symboliques suivis), les annulations répétées, l’ajout des joueurs, le parsing et les menus, les saisons, les exports et la restauration des anciens et nouveaux formats.
+Ils couvrent les totaux, la liste des joueurs, la migration, les écritures atomiques (droits conservés, liens symboliques suivis), la suppression de parties, l’ajout des joueurs, le parsing et les menus, les saisons, les exports et la restauration des anciens et nouveaux formats.
 
 ## Notes et limites
 
 - Le bot ne fonctionne qu’en **commandes à préfixe** `t/` (pas de slash commands). L’aide par défaut de discord.py est désactivée : `t/help` liste les commandes, `t/help <commande>` envoie le détail.
 - L’état est stocké en **globales de module** et les écritures JSON ne sont pas protégées par verrou : une seule instance à la fois, une saisie à la fois. Ne pas faire tourner le conteneur et un `uv run bot.py` en local en même temps, ils écriraient dans les mêmes fichiers de `data/`.
-- `t/undo`, `t/edit` (bouton **Écraser**) et `t/new_season` sont **irréversibles** sans accès aux fichiers sur le serveur ; `t/undo` / `t/new_season` ont le garde-fou `IAMSURE`, `t/edit` un bouton de confirmation.
+- `t/delete` (confirmation `oui supprime`), `t/edit` (bouton **Écraser**) et `t/new_season` (`IAMSURE`) sont **irréversibles** sans accès aux fichiers sur le serveur.
 - `tarot_commands/rules.py` contient aussi `DESCENDANTE_SCORES`, utilisé uniquement pour l’affichage `t/scores_descendante` (le calcul réel se fait dans `game.calcul_score_descendante`).

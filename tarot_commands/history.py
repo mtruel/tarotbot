@@ -48,3 +48,14 @@ def append_related_message_id(canonical_or_any_id, score_message_id):
         related.append(score_message_id)
         save_history(history)
     return True
+
+
+def delete_history_entry(target_message_id):
+    """Retire une partie de l'historique. Retourne l'entrée ou None si introuvable."""
+    history = load_history()
+    index = find_history_index_by_message_id(history, target_message_id)
+    if index is None:
+        return None
+    removed = history.pop(index)
+    save_history(history)
+    return removed

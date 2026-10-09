@@ -19,14 +19,22 @@ from tarot_commands.state import (
 )
 from tarot_commands.restore_lib import RestoreError, read_archive, read_snapshot, restore_archive
 from tarot_commands.export_lib import build_export
-from tarot_commands.history import append_related_message_id, replace_history_entry, update_history
+from tarot_commands.history import (
+    append_related_message_id,
+    delete_history_entry,
+    replace_history_entry,
+    update_history,
+)
 from tarot_commands.sessions import find_history_by_message_id
 from tarot_commands.edit import (
     handle_edit_message_edit,
     resolve_edit_target,
     strip_optional_auto_prefix,
 )
-from tarot_commands.undo import undo
+from tarot_commands.delete import (
+    format_entry_summary,
+    resolve_delete_target,
+)
 from tarot_commands.add_player import add_player, add_players
 from tarot_commands.new_season import new_season
 from tarot_commands.leaderboard import leaderboard_text, leaderboard2_text
@@ -311,7 +319,7 @@ class StateTests(unittest.TestCase):
         self.assertEqual(load_history(archives[0] / 'history.json'), self.games)
         self.assertEqual(load_history(), [])
 
-    def test_record_add_and_repeated_undo(self):
+    def test_record_add_and_delete_entries(self):
         ctx = AsyncMock()
         asyncio.run(add_player.callback(ctx, 'Nouveau'))
         asyncio.run(add_player.callback(ctx, 'nouveau'))
@@ -319,20 +327,72 @@ class StateTests(unittest.TestCase):
         self.assertEqual(load_player_names().count('Nouveau'), 1)
         self.assertEqual(load_player_names().count('Eve'), 1)
         self.assertEqual(compute_scores()['Nouveau'], 0)
-        update_history({'Nouveau': 5, 'Alice': -5}, {'type': 'test'})
+
+        self.assertEqual(
+            resolve_delete_target('1557730091864301699', None),
+            1557730091864301699,
+        )
+        self.assertEqual(resolve_delete_target('', 111), 111)
+        self.assertEqual(
+            resolve_delete_target('1557730091864301699', 222),
+            1557730091864301699,
+        )
+        self.assertIsNone(resolve_delete_target('', None))
+        self.assertIsNone(resolve_delete_target('pas-un-id', None))
+
+        save_history([
+            {
+                'time': '01/10/2026, 12:00:00',
+                'message_id': 100001,
+                'type': 'partie',
+                'preneur': 'Alice',
+                'enchere': 'Petite',
+                'points_attaque': 50,
+                'bouts': 2,
+                'partenaire': None,
+                'defenseurs': ['Bob', 'Carol'],
+                'primes_attaque': [],
+                'primes_defense': [],
+                'miseres': [],
+                'related_message_ids': [],
+                'scores': {'Alice': 40, 'Bob': -20, 'Carol': -20},
+            },
+            {
+                'time': '01/10/2026, 13:00:00',
+                'message_id': 100002,
+                'type': 'partie',
+                'related_message_ids': [200002],
+                'scores': {'Alice': -10, 'Bob': 20, 'Carol': -10},
+            },
+        ])
+        update_history(
+            {'Nouveau': 5, 'Alice': -5},
+            {'type': 'test', 'message_id': 100003},
+        )
         self.assertEqual(compute_scores()['Nouveau'], 5)
         self.assertFalse(Path('players_backup.json').exists())
-        asyncio.run(undo.callback(ctx))
+
+        summary = format_entry_summary(load_history()[0])
+        self.assertIn('Alice', summary)
+        self.assertIn('Petite', summary)
+        self.assertIn('contre Bob, Carol', summary)
+
+        self.assertIsNone(delete_history_entry(404404))
         self.assertEqual(len(load_history()), 3)
-        asyncio.run(undo.callback(ctx, 'IAMSURE'))
+
+        removed = delete_history_entry(200002)
+        self.assertEqual(removed['message_id'], 100002)
+        self.assertEqual(compute_scores()['Nouveau'], 5)
+        self.assertEqual(compute_scores()['Alice'], 35)
+
+        self.assertIsNotNone(delete_history_entry(100003))
         self.assertEqual(compute_scores()['Nouveau'], 0)
-        asyncio.run(undo.callback(ctx, 'IAMSURE'))
         self.assertEqual(compute_scores()['Alice'], 40)
-        asyncio.run(undo.callback(ctx, 'IAMSURE'))
+
+        self.assertIsNotNone(delete_history_entry(100001))
         self.assertTrue(all(v == 0 for v in compute_scores().values()))
-        asyncio.run(undo.callback(ctx, 'IAMSURE'))
         self.assertEqual(load_history(), [])
-        self.assertIn('vide', ctx.send.call_args.args[0])
+        self.assertIsNone(delete_history_entry(100001))
 
     def test_game_parsing_menus_and_calculation(self):
         game.reset_cache()
@@ -475,12 +535,16 @@ class StateTests(unittest.TestCase):
         with self.assertRaises(RestoreError):
             restore_archive(path, self.tmp.name)
         self.assertEqual(Path('history.json').read_bytes(), before)
-        path = self.archive(players={'Alice': 40, 'Bob': -20, 'Carol': -20, 'Inscrit': 0}, history=self.games[:1])
+        one_game = {**self.games[0], 'message_id': 424242, 'related_message_ids': []}
+        path = self.archive(
+            players={'Alice': 40, 'Bob': -20, 'Carol': -20, 'Inscrit': 0},
+            history=[one_game],
+        )
         snapshot = restore_archive(path, self.tmp.name)
         self.assertTrue(Path(snapshot, 'history.json').exists())
         self.assertEqual(compute_scores()['Inscrit'], 0)
         self.assertEqual(compute_scores()['Alice'], 40)
-        asyncio.run(undo.callback(AsyncMock(), 'IAMSURE'))
+        self.assertIsNotNone(delete_history_entry(424242))
         self.assertEqual(compute_scores()['Alice'], 0)
 
     def test_restore_snapshot_legacy_and_current(self):
