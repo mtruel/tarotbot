@@ -162,25 +162,47 @@ COMMANDS = [
         "Irréversible sans accès aux fichiers sur le serveur.",
     ),
     (
-        "poignees",
-        "t/poignees [n]",
-        "seuils de poignée pour n joueurs",
-        "Affiche le nombre d’atouts et la prime de chaque poignée.\n"
-        "n vaut 3, 4 ou 5. Sans argument, n vaut 5.\n"
-        "Exemple : `t/poignees 4`",
+        "rules",
+        "t/rules",
+        "résumé des règles du tarot",
+        "Résumé du règlement officiel FFT : cartes, bouts, valeurs, contrat selon les "
+        "bouts, enchères et primes.\n"
+        "Sous-commandes :\n"
+        "`t/rules full` détaille tout le règlement (plusieurs messages).\n"
+        "`t/rules contrats` points à atteindre selon les bouts.\n"
+        "`t/rules poignees [n]` seuils de poignée pour 3, 4 ou 5 joueurs (défaut 5).\n"
+        "`t/rules descendante` règles de la descendante du labo.\n"
+        "Exemple : `t/rules poignees 4`",
     ),
     (
-        "contrats",
-        "t/contrats",
+        "rules full",
+        "t/rules full",
+        "règlement détaillé du tarot",
+        "Envoie le règlement officiel FFT détaillé, découpé en plusieurs messages : "
+        "cartes, distribution, enchères, Chien et Écart, chelem, poignée, Petit au bout, "
+        "jeu de la carte, calcul des scores, et variantes à 3 et 5 joueurs.\n"
+        "Aucun argument.",
+    ),
+    (
+        "rules contrats",
+        "t/rules contrats",
         "points à atteindre selon le nombre de bouts",
         "Affiche le contrat (points à faire) pour 0, 1, 2 et 3 bouts. Aucun argument.",
     ),
     (
-        "scores_descendante",
-        "t/scores_descendante <n>",
-        "scores de descendante pour n joueurs",
-        "Affiche les points gagnés ou perdus selon le rang. n vaut 3, 4 ou 5.\n"
-        "Exemple : `t/scores_descendante 4`",
+        "rules poignees",
+        "t/rules poignees [n]",
+        "seuils de poignée pour n joueurs",
+        "Affiche le nombre d’atouts et la prime de chaque poignée.\n"
+        "n vaut 3, 4 ou 5. Sans argument, n vaut 5.\n"
+        "Exemple : `t/rules poignees 4`",
+    ),
+    (
+        "rules descendante",
+        "t/rules descendante",
+        "règles de la descendante",
+        "Explique la descendante du labo : le but est de marquer le moins de points, avec "
+        "la formule de calcul des scores à 3, 4 ou 5 joueurs. Aucun argument.",
     ),
     (
         "curves",
@@ -257,7 +279,7 @@ def explain_command_error(ctx, error):
     if isinstance(error, commands.CommandNotFound):
         return unknown_command_message(ctx.invoked_with or "")
 
-    name = ctx.command.name if ctx.command else "help"
+    name = ctx.command.qualified_name if ctx.command else "help"
 
     if isinstance(error, commands.MissingRequiredArgument):
         return error_message(name, _missing_text(name))
@@ -301,9 +323,6 @@ def _missing_text(name):
             "Indique l’id de la partie, ou réponds au message (commande / tableau).\n"
             "Exemple : `t/delete 1557730091864301699`"
         ),
-        "scores_descendante": (
-            "Il manque le nombre de joueurs (3, 4 ou 5). Exemple : `t/scores_descendante 4`"
-        ),
     }
     if name in texts:
         return texts[name]
@@ -320,16 +339,23 @@ def _too_many_text(name):
         "game": (
             "Un seul nombre : les points entiers de l’attaque, de 0 à 91. Exemple : `t/game 45`"
         ),
-        "help": "Une seule commande à détailler. Exemple : `t/help auto`",
-        "poignees": "Un seul nombre de joueurs : 3, 4 ou 5. Exemple : `t/poignees 4`",
-        "scores_descendante": (
-            "Un seul nombre de joueurs : 3, 4 ou 5. Exemple : `t/scores_descendante 4`"
+        "help": "Une commande à détailler, au plus 2 mots. Exemple : `t/help rules poignees`",
+        "rules": (
+            "Sous-commandes : `full`, `contrats`, `poignees`, `descendante`. "
+            "Exemple : `t/rules poignees 4`"
         ),
+        "rules poignees": "Un seul nombre de joueurs : 3, 4 ou 5. Exemple : `t/rules poignees 4`",
         "new_season": "Pour confirmer : `t/new_season IAMSURE`",
         "ping": "`t/ping` ne prend pas d’argument.",
         "leaderboard": "`t/leaderboard` ne prend pas d’argument.",
         "leaderboard2": "`t/leaderboard2` ne prend pas d’argument.",
-        "contrats": "`t/contrats` ne prend pas d’argument.",
+        "rules contrats": (
+            "`t/rules contrats` ne prend pas d’argument. Sous-commandes : `t/help rules`."
+        ),
+        "rules full": "`t/rules full` ne prend pas d’argument. Sous-commandes : `t/help rules`.",
+        "rules descendante": (
+            "`t/rules descendante` ne prend pas d’argument. Sous-commandes : `t/help rules`."
+        ),
         "curves": "`t/curves` ne prend pas d’argument.",
         "export": "`t/export` ou `t/export backup` — aucun autre argument.",
         "delete": (
@@ -349,9 +375,10 @@ def _too_many_text(name):
 
 
 @commands.command()
-async def help(ctx, command_name=None):
-    """Liste les commandes, ou le détail d’une commande : t/help auto."""
-    if command_name is None:
+async def help(ctx, *parts):
+    """Liste les commandes, ou le détail d’une commande : t/help auto, t/help rules full."""
+    command_name = " ".join(parts)
+    if not command_name:
         lines = [f"`{usage}` {short}" for _, usage, short, _ in COMMANDS]
         await ctx.send("**Liste des commandes**\n" + "\n".join(lines))
         return

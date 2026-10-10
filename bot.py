@@ -26,7 +26,7 @@ from tarot_commands.leaderboard import leaderboard, leaderboard2
 from tarot_commands.new_season import new_season
 from tarot_commands.ping import ping
 from tarot_commands.restore import restore
-from tarot_commands.rules import contrats, poignees, scores_descendante
+from tarot_commands.rules import rules
 from tarot_commands.state import migrate_state
 from tarot_commands.undo import undo
 
@@ -75,9 +75,7 @@ bot.add_command(edit)
 bot.add_command(undo)
 bot.add_command(game)
 bot.add_command(descendante)
-bot.add_command(poignees)
-bot.add_command(contrats)
-bot.add_command(scores_descendante)
+bot.add_command(rules)
 bot.add_command(curves)
 bot.add_command(auto)
 bot.add_command(add_players)

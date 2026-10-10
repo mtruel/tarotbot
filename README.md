@@ -110,9 +110,11 @@ Toutes les commandes enregistrées dans [`bot.py`](bot.py) :
 | `t/edit <id> <auto…>` | Écrase une partie déjà enregistrée (ou en réponse à un message lié) |
 | `t/delete <id>` | Supprime une partie (récap + `oui supprime` / `non` ; ou en réponse) |
 | `t/new_season IAMSURE` | Archive la saison courante dans un dossier daté et repart à zéro |
-| `t/poignees [n]` | Rappel des seuils de poignée selon le nombre de joueurs (défaut `5`) |
-| `t/contrats` | Rappel des points à atteindre selon le nombre de bouts |
-| `t/scores_descendante <n>` | Rappel des scores de descendante pour `n` joueurs |
+| `t/rules` | Rappel du règlement officiel FFT (résumé) |
+| `t/rules full` | Règlement détaillé, découpé en plusieurs messages |
+| `t/rules contrats` | Rappel des points à atteindre selon le nombre de bouts |
+| `t/rules poignees [n]` | Rappel des seuils de poignée selon le nombre de joueurs (défaut `5`) |
+| `t/rules descendante` | Rappel des règles de la descendante (le moins de points gagne) |
 | `t/curves` | Génère `curves.png` et l’envoie dans le salon |
 | `t/export` | Envoie un zip des données (liste des joueurs, historique, saisons archivées ; sans les copies `_pre_*` ni `history.backup-*`) en pièce jointe |
 | `t/export backup` | Snapshot local + zip du dépôt ; copie Drive (ajout seul) ensuite (message quand c’est fini) |
@@ -152,9 +154,10 @@ t/edit 1557730091864301699 Alice garde 50 2 vs Bob Carol
 t/delete 1557730091864301699
 
 # Rappels de règles
-t/contrats
-t/poignees 5
-t/scores_descendante 4
+t/rules
+t/rules contrats
+t/rules poignees 5
+t/rules descendante
 ```
 
 ### Saisie en texte libre — `t/auto`
@@ -398,7 +401,7 @@ tarobot-imb/
 │   ├── leaderboard.py         # t/leaderboard, t/leaderboard2 (points depuis history)
 │   ├── state.py               # liste des joueurs, calcul des totaux, migration et écritures atomiques
 │   ├── game.py                # t/game, t/descendante, t/auto + calcul des scores
-│   ├── rules.py               # constantes (poignées, contrats, primes) + t/poignees/contrats/scores_descendante
+│   ├── rules.py               # constantes (poignées, contrats, primes) + t/rules / contrats / poignees / descendante
 │   ├── edit.py                # t/edit (écraser une partie)
 │   ├── delete.py              # t/delete (supprimer une partie)
 │   ├── undo.py                # t/undo (redirige vers delete / edit)
@@ -432,4 +435,4 @@ Ils couvrent les totaux, la liste des joueurs, la migration, les écritures atom
 - Le bot ne fonctionne qu’en **commandes à préfixe** `t/` (pas de slash commands). L’aide par défaut de discord.py est désactivée : `t/help` liste les commandes, `t/help <commande>` envoie le détail.
 - L’état est stocké en **globales de module** et les écritures JSON ne sont pas protégées par verrou : une seule instance à la fois, une saisie à la fois. Ne pas faire tourner le conteneur et un `uv run bot.py` en local en même temps, ils écriraient dans les mêmes fichiers de `data/`.
 - `t/delete` (confirmation `oui supprime` / `non`), `t/edit` (bouton **Écraser**) et `t/new_season` (`IAMSURE`) sont **irréversibles** sans accès aux fichiers sur le serveur.
-- `tarot_commands/rules.py` contient aussi `DESCENDANTE_SCORES`, utilisé uniquement pour l’affichage `t/scores_descendante` (le calcul réel se fait dans `game.calcul_score_descendante`).
+- `t/rules` regroupe les rappels de règlement (résumé FFT, `full`, `contrats`, `poignees`, `descendante`).
