@@ -66,6 +66,7 @@ ENTRYPOINT ["/usr/local/bin/entrypoint.sh"]
 
 # Runtime public minimal : pas d'outil restic/rclone, ni scripts de sauvegarde.
 FROM python:3.12-slim-bookworm AS web
+ARG GIT_COMMIT=unknown
 RUN apt-get update \
     && apt-get install -y --no-install-recommends ca-certificates \
     && rm -rf /var/lib/apt/lists/* \
@@ -76,6 +77,26 @@ COPY tarot_commands ./tarot_commands
 COPY tarot_web ./tarot_web
 ENV PATH="/app/.venv/bin:$PATH" \
     PYTHONPATH="/app" \
-    PYTHONUNBUFFERED=1
+    PYTHONUNBUFFERED=1 \
+    GIT_COMMIT=${GIT_COMMIT}
 USER tarot
 CMD ["python", "-m", "tarot_web"]
+
+# Faux bot de l'environnement de debug : aucune connexion Discord.
+FROM python:3.12-slim-bookworm AS debug-bot
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends ca-certificates \
+    && rm -rf /var/lib/apt/lists/* \
+    && useradd --create-home --uid 1000 tarot
+WORKDIR /app
+COPY --from=builder /app/.venv /app/.venv
+COPY tarot_commands ./tarot_commands
+COPY tarot_debug ./tarot_debug
+COPY debug_bot.py ./
+ENV PATH="/app/.venv/bin:$PATH" \
+    PYTHONPATH="/app" \
+    PYTHONUNBUFFERED=1
+WORKDIR /data
+RUN chown tarot:tarot /data
+USER tarot
+CMD ["python", "/app/debug_bot.py"]

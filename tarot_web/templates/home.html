@@ -1,6 +1,6 @@
 <!doctype html>
-<html lang="fr"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Tarot · Classement</title><link rel="stylesheet" href="/static/pico.min.css"><link rel="stylesheet" href="/static/site.css"></head>
-<body><main class="container"><nav><strong>Tarot · Classement</strong><ul><li><a href="/game">Saisir une partie</a></li></ul></nav>
+<html lang="fr"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">{% if debug %}<meta name="robots" content="noindex">{% endif %}<title>Tarot · Classement</title><link rel="stylesheet" href="/static/pico.min.css"><link rel="stylesheet" href="/static/site.css"></head>
+<body>{% if debug %}{% include "debug_banner.html" %}{% endif %}<main class="container"><nav><strong>Tarot · Classement</strong><ul><li><a href="/game">Saisir une partie</a></li></ul></nav>
 <p>Connecté : {{ user.name }}</p><form method="post" action="/logout"><input type="hidden" name="csrf" value="{{ csrf }}"><button class="secondary" type="submit">Déconnexion</button></form>
 <section><h1>Points cumulés</h1><div class="chart">{{ chart | safe }}</div><p class="muted">Courbes : 12 premiers joueurs de la liste, parties de la saison en cours.</p></section>
 <section><h2>Classement</h2><div class="scroll"><table><thead><tr><th>Joueur</th><th>Points</th><th>Parties</th><th>Points / partie</th><th>V/D</th><th>Écart-type</th></tr></thead><tbody>{% for row in rows %}<tr><th>{{ row.name }}</th><td>{{ row.points }}</td><td>{{ row.games }}</td><td>{{ row.mean }}</td><td>{{ row.wins }}/{{ row.losses }}</td><td>{{ row.deviation }}</td></tr>{% endfor %}</tbody></table></div></section>

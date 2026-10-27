@@ -1,0 +1,11 @@
+<div class="debug-banner" role="status">
+  <strong>MODE DEBUG</strong>
+  <span>données factices · Discord déconnecté</span>
+  <span class="debug-meta">données : {{ debug_data_dir }} · commit : {{ debug_commit }}</span>
+  <a href="/debug/chat">Console de commandes</a>
+  <form method="post" action="/debug/reset">
+    <input type="hidden" name="csrf" value="{{ csrf }}">
+    <button type="submit" class="secondary">Réinitialiser les données</button>
+  </form>
+  <a href="https://tarot-imb.beta.public.truel.fr">Prod</a>
+</div>

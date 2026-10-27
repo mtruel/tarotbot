@@ -1,0 +1,61 @@
+name: tarotbot-debug
+
+services:
+  tarotbot:
+    build:
+      context: .
+      target: debug-bot
+    image: tarotbot-debug-bot
+    container_name: tarotbot-debug
+    init: true
+    restart: unless-stopped
+    environment:
+      TZ: Europe/Paris
+      TAROT_DEBUG: "1"
+      TAROT_DEBUG_DATA_DIR: /data
+      TAROT_INTERNAL_TOKEN: ${TAROT_DEBUG_INTERNAL_TOKEN:-debug-internal-token-0000000000000000}
+      TAROT_CHANNEL_ID: "1"
+      TAROT_DEBUG_USER_NAME: ${TAROT_DEBUG_USER_NAME:-Debug User}
+    volumes:
+      - ./data-debug:/data
+    networks:
+      - tarot-debug
+
+  tarot-web-debug:
+    build:
+      context: .
+      target: web
+      args:
+        GIT_COMMIT: ${GIT_COMMIT:-unknown}
+    image: tarotbot-web-debug
+    container_name: tarot-web-debug
+    init: true
+    restart: unless-stopped
+    depends_on:
+      - tarotbot
+    user: "1000:1000"
+    working_dir: /app
+    read_only: true
+    cap_drop: [ALL]
+    security_opt:
+      - no-new-privileges:true
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,size=16m
+    environment:
+      TZ: Europe/Paris
+      TAROT_DEBUG: "1"
+      TAROT_DEBUG_DATA_DIR: /data
+      TAROT_INTERNAL_TOKEN: ${TAROT_DEBUG_INTERNAL_TOKEN:-debug-internal-token-0000000000000000}
+      WEB_SESSION_SECRET: ${TAROT_DEBUG_SESSION_SECRET:-debug-session-secret-0000000000000000}
+      TAROT_DEBUG_USER_NAME: ${TAROT_DEBUG_USER_NAME:-Debug User}
+      GIT_COMMIT: ${GIT_COMMIT:-unknown}
+    networks:
+      - tarot-debug
+      - beta
+
+networks:
+  tarot-debug:
+    internal: true
+  beta:
+    name: beta
+    external: true

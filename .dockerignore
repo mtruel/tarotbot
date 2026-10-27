@@ -7,6 +7,10 @@ curves.png
 # contient l'état du bot et tous les dossiers de saisons archivés
 data/
 
+# environnement de debug
+data-debug/
+.env.debug
+
 # Environnements / caches
 .venv/
 __pycache__/

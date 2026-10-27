@@ -21,3 +21,17 @@ _Avoid_: Confirmation, lorsqu’il est question du message avant validation
 
 **Joueur inconnu** : Nom qui ne correspond à aucun joueur du classement.
 _Avoid_: Joueur invalide
+
+## Environnements
+
+**Prod** : Environnement de référence, avec le bot Discord réel et les données réelles.
+_Avoid_: Production, live
+
+**Environnement de debug** : Environnement isolé pour tester une évolution avant la prod, avec un bot simulé et des données factices.
+_Avoid_: Version de test, bac à sable, staging
+
+**Données factices** : Jeu de données versionné qui remplace les données réelles dans l'environnement de debug.
+_Avoid_: Données de test, mock data
+
+**Console de commandes** : Page de l'environnement de debug qui rejoue les commandes Discord et affiche leurs réponses.
+_Avoid_: Page chat, chat de test

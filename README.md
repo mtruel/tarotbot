@@ -84,6 +84,23 @@ Points à connaître :
 - Aucun secret n’est embarqué dans l’image : le token est fourni au conteneur via la variable `DISCORD_TOKEN` lue depuis le `.env` (cf. [Configuration du token](#configuration-du-token)).
 - Le fichier `.env` à la racine est chargé par `docker compose` (`env_file` optionnel) ; il est exclu du contexte de build par [`.dockerignore`](.dockerignore).
 
+### Environnement de debug (données factices)
+
+Le debug tourne dans une stack Compose séparée, avec un faux bot qui ne se connecte pas à Discord, des données factices et une console de commandes. Il ne touche jamais `./data` ni le vrai serveur.
+
+```bash
+docker compose -f docker-compose.debug.yml up -d --build
+docker compose -f docker-compose.debug.yml logs -f tarotbot tarot-web-debug
+# arrêt :
+docker compose -f docker-compose.debug.yml down
+```
+
+- Données : `./data-debug` (seedé depuis `tarot_debug/fixtures/`, réinitialisable depuis le bandeau). Créer le dossier avant le premier lancement (`mkdir -p data-debug`) : il doit appartenir à l'UID 1000.
+- Console : `/debug/chat` (boutons, menus et confirmations comme sur Discord).
+- Accès LAN : `https://tarotbot-imb.beta.local.truel.fr` (route Caddy bêta, CA interne).
+- Garde-fous : refus si `DISCORD_TOKEN` est défini ou si le dossier de données contient des données sans marqueur `.debug`.
+- Développement : travailler dans un worktree dédié (`git worktree add ~/tarotbot-debug -b feature/...`) pour ne pas reconstruire la prod depuis une branche de feature.
+
 ### Exécution et données
 
 Ne pas démarrer le bot en direct (`python bot.py`, `uv run bot.py` ou `screen`). Docker le garde actif après fermeture de la session SSH. Les données se consultent directement dans `data/` ; le conteneur les voit sous `/data`.

@@ -15,9 +15,11 @@ from tarot_commands.state import load_history, load_player_names
 from tarot_commands.web_game import validate_game
 
 
-async def create_app(bot, *, token=None, channel_id=None):
+async def create_app(bot, *, token=None, channel_id=None, channel_type=None):
     secret = token if token is not None else os.environ.get("TAROT_INTERNAL_TOKEN", "")
     channel = channel_id if channel_id is not None else os.environ.get("TAROT_CHANNEL_ID", "")
+    if channel_type is None:
+        channel_type = discord.TextChannel
     if not secret:
         raise ValueError("TAROT_INTERNAL_TOKEN manquant")
     if len(secret) < 32:
@@ -68,7 +70,7 @@ async def create_app(bot, *, token=None, channel_id=None):
                 if bot.is_closed() or not bot.is_ready():
                     raise web.HTTPServiceUnavailable(text="Discord indisponible")
                 target = bot.get_channel(int(channel)) or await bot.fetch_channel(int(channel))
-                if not isinstance(target, discord.TextChannel):
+                if not isinstance(target, channel_type):
                     raise web.HTTPServiceUnavailable(text="Salon inaccessible")
                 # Aucun await entre la lecture et l'écriture dans update_history.
                 announcement = await target.send(

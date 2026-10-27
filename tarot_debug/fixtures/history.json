@@ -1,0 +1,991 @@
+[
+    {
+        "message_id": 1700000000000000000,
+        "type": "partie",
+        "enchere": "Garde",
+        "multiplicateur": 2,
+        "preneur": "Eve",
+        "partenaire": "Farid",
+        "defenseurs": [
+            "Gaëlle",
+            "David",
+            "Hugo"
+        ],
+        "bouts": 2,
+        "points_attaque": 73,
+        "primes_attaque": [],
+        "primes_defense": [
+            "Double Poignée"
+        ],
+        "miseres": [],
+        "time": "06/01/2026, 20:30:00",
+        "scores": {
+            "Farid": 144.0,
+            "Eve": 288.0,
+            "Gaëlle": -144.0,
+            "David": -144.0,
+            "Hugo": -144.0
+        },
+        "related_message_ids": []
+    },
+    {
+        "message_id": 1700000000000000001,
+        "type": "partie",
+        "enchere": "GardeContre",
+        "multiplicateur": 6,
+        "preneur": "Bob",
+        "partenaire": null,
+        "defenseurs": [
+            "Alice",
+            "Hugo"
+        ],
+        "bouts": 1,
+        "points_attaque": 68,
+        "primes_attaque": [
+            "Simple Poignée"
+        ],
+        "primes_defense": [
+            "Petit au bout"
+        ],
+        "miseres": [],
+        "time": "10/01/2026, 21:30:00",
+        "scores": {
+            "Bob": 424.0,
+            "Alice": -212.0,
+            "Hugo": -212.0
+        },
+        "related_message_ids": []
+    },
+    {
+        "message_id": 1700000000000000002,
+        "type": "partie",
+        "enchere": "GardeContre",
+        "multiplicateur": 6,
+        "preneur": "Bob",
+        "partenaire": null,
+        "defenseurs": [
+            "David",
+            "Eve",
+            "Hugo"
+        ],
+        "bouts": 0,
+        "points_attaque": 35,
+        "primes_attaque": [],
+        "primes_defense": [],
+        "miseres": [],
+        "time": "15/01/2026, 23:30:00",
+        "scores": {
+            "Bob": -828.0,
+            "David": 276.0,
+            "Eve": 276.0,
+            "Hugo": 276.0
+        },
+        "related_message_ids": []
+    },
+    {
+        "message_id": 1700000000000000003,
+        "type": "partie",
+        "enchere": "Petite",
+        "multiplicateur": 1,
+        "preneur": "Bob",
+        "partenaire": null,
+        "defenseurs": [
+            "Eve",
+            "Gaëlle",
+            "Claire"
+        ],
+        "bouts": 0,
+        "points_attaque": 61,
+        "primes_attaque": [],
+        "primes_defense": [
+            "Double Poignée"
+        ],
+        "miseres": [],
+        "time": "21/01/2026, 01:30:00",
+        "scores": {
+            "Bob": 180.0,
+            "Eve": -60.0,
+            "Gaëlle": -60.0,
+            "Claire": -60.0
+        },
+        "related_message_ids": []
+    },
+    {
+        "message_id": 1700000000000000004,
+        "type": "partie",
+        "enchere": "GardeContre",
+        "multiplicateur": 6,
+        "preneur": "Alice",
+        "partenaire": null,
+        "defenseurs": [
+            "Claire",
+            "Farid",
+            "David"
+        ],
+        "bouts": 3,
+        "points_attaque": 67,
+        "primes_attaque": [
+            "Petit au bout"
+        ],
+        "primes_defense": [
+            "Simple Poignée"
+        ],
+        "miseres": [],
+        "time": "26/01/2026, 02:30:00",
+        "scores": {
+            "Alice": 1248.0,
+            "Claire": -416.0,
+            "Farid": -416.0,
+            "David": -416.0
+        },
+        "related_message_ids": []
+    },
+    {
+        "message_id": 1700000000000000005,
+        "type": "descendante",
+        "joueurs": [
+            "Bob",
+            "Alice",
+            "Hugo"
+        ],
+        "points": [
+            28,
+            36,
+            49
+        ],
+        "miseres": [
+            "Bob"
+        ],
+        "time": "29/01/2026, 04:30:00",
+        "scores": {
+            "Bob": 29,
+            "Alice": 5,
+            "Hugo": -34
+        },
+        "related_message_ids": []
+    },
+    {
+        "message_id": 1700000000000000006,
+        "type": "partie",
+        "enchere": "GardeContre",
+        "multiplicateur": 6,
+        "preneur": "Alice",
+        "partenaire": "Hugo",
+        "defenseurs": [
+            "Eve",
+            "Farid",
+            "David"
+        ],
+        "bouts": 0,
+        "points_attaque": 25,
+        "primes_attaque": [],
+        "primes_defense": [
+            "Chelem annoncé"
+        ],
+        "miseres": [],
+        "time": "31/01/2026, 04:30:00",
+        "scores": {
+            "Hugo": -336.0,
+            "Alice": -672.0,
+            "Eve": 336.0,
+            "Farid": 336.0,
+            "David": 336.0
+        },
+        "related_message_ids": []
+    },
+    {
+        "message_id": 1700000000000000007,
+        "type": "partie",
+        "enchere": "GardeContre",
+        "multiplicateur": 6,
+        "preneur": "Eve",
+        "partenaire": null,
+        "defenseurs": [
+            "Alice",
+            "David",
+            "Gaëlle"
+        ],
+        "bouts": 0,
+        "points_attaque": 22,
+        "primes_attaque": [],
+        "primes_defense": [
+            "Double Poignée"
+        ],
+        "miseres": [],
+        "time": "06/02/2026, 04:30:00",
+        "scores": {
+            "Eve": -1152.0,
+            "Alice": 384.0,
+            "David": 384.0,
+            "Gaëlle": 384.0
+        },
+        "related_message_ids": []
+    },
+    {
+        "message_id": 1700000000000000008,
+        "type": "partie",
+        "enchere": "Petite",
+        "multiplicateur": 1,
+        "preneur": "Gaëlle",
+        "partenaire": null,
+        "defenseurs": [
+            "Bob",
+            "Claire",
+            "David"
+        ],
+        "bouts": 0,
+        "points_attaque": 26,
+        "primes_attaque": [],
+        "primes_defense": [],
+        "miseres": [
+            "David"
+        ],
+        "time": "09/02/2026, 06:30:00",
+        "scores": {
+            "Gaëlle": -175.0,
+            "Bob": 45.0,
+            "Claire": 45.0,
+            "David": 85.0
+        },
+        "related_message_ids": []
+    },
+    {
+        "message_id": 1700000000000000009,
+        "type": "partie",
+        "enchere": "Petite",
+        "multiplicateur": 1,
+        "preneur": "Bob",
+        "partenaire": "Hugo",
+        "defenseurs": [
+            "David",
+            "Claire",
+            "Gaëlle"
+        ],
+        "bouts": 2,
+        "points_attaque": 55,
+        "primes_attaque": [
+            "Chelem non annoncé"
+        ],
+        "primes_defense": [],
+        "miseres": [],
+        "time": "14/02/2026, 08:30:00",
+        "scores": {
+            "Hugo": 239.0,
+            "Bob": 478.0,
+            "David": -239.0,
+            "Claire": -239.0,
+            "Gaëlle": -239.0
+        },
+        "related_message_ids": []
+    },
+    {
+        "message_id": 1700000000000000010,
+        "type": "partie",
+        "enchere": "Petite",
+        "multiplicateur": 1,
+        "preneur": "Gaëlle",
+        "partenaire": null,
+        "defenseurs": [
+            "David",
+            "Eve",
+            "Claire"
+        ],
+        "bouts": 3,
+        "points_attaque": 28,
+        "primes_attaque": [],
+        "primes_defense": [
+            "Double Poignée"
+        ],
+        "miseres": [],
+        "time": "19/02/2026, 10:30:00",
+        "scores": {
+            "Gaëlle": -189.0,
+            "David": 63.0,
+            "Eve": 63.0,
+            "Claire": 63.0
+        },
+        "related_message_ids": []
+    },
+    {
+        "message_id": 1700000000000000011,
+        "type": "descendante",
+        "joueurs": [
+            "Alice",
+            "Farid",
+            "Bob",
+            "David"
+        ],
+        "points": [
+            43,
+            57,
+            7,
+            9
+        ],
+        "miseres": [],
+        "time": "23/02/2026, 12:30:00",
+        "scores": {
+            "Alice": -56,
+            "Farid": -112,
+            "Bob": 88,
+            "David": 80
+        },
+        "related_message_ids": []
+    },
+    {
+        "message_id": 1700000000000000012,
+        "type": "partie",
+        "enchere": "Garde",
+        "multiplicateur": 2,
+        "preneur": "Gaëlle",
+        "partenaire": null,
+        "defenseurs": [
+            "Alice",
+            "Hugo"
+        ],
+        "bouts": 2,
+        "points_attaque": 43,
+        "primes_attaque": [
+            "Double Poignée"
+        ],
+        "primes_defense": [],
+        "miseres": [],
+        "time": "26/02/2026, 14:30:00",
+        "scores": {
+            "Gaëlle": 168.0,
+            "Alice": -84.0,
+            "Hugo": -84.0
+        },
+        "related_message_ids": []
+    },
+    {
+        "message_id": 1700000000000000013,
+        "type": "partie",
+        "enchere": "GardeSans",
+        "multiplicateur": 4,
+        "preneur": "Gaëlle",
+        "partenaire": null,
+        "defenseurs": [
+            "Hugo",
+            "Eve"
+        ],
+        "bouts": 2,
+        "points_attaque": 65,
+        "primes_attaque": [
+            "Simple Poignée"
+        ],
+        "primes_defense": [],
+        "miseres": [],
+        "time": "01/03/2026, 15:30:00",
+        "scores": {
+            "Gaëlle": 432.0,
+            "Hugo": -216.0,
+            "Eve": -216.0
+        },
+        "related_message_ids": []
+    },
+    {
+        "message_id": 1700000000000000014,
+        "type": "partie",
+        "enchere": "GardeSans",
+        "multiplicateur": 4,
+        "preneur": "Eve",
+        "partenaire": null,
+        "defenseurs": [
+            "Farid",
+            "Bob",
+            "Gaëlle"
+        ],
+        "bouts": 0,
+        "points_attaque": 30,
+        "primes_attaque": [],
+        "primes_defense": [],
+        "miseres": [],
+        "time": "05/03/2026, 15:30:00",
+        "scores": {
+            "Eve": -612.0,
+            "Farid": 204.0,
+            "Bob": 204.0,
+            "Gaëlle": 204.0
+        },
+        "related_message_ids": []
+    },
+    {
+        "message_id": 1700000000000000015,
+        "type": "partie",
+        "enchere": "Petite",
+        "multiplicateur": 1,
+        "preneur": "Alice",
+        "partenaire": null,
+        "defenseurs": [
+            "Hugo",
+            "Eve",
+            "Claire"
+        ],
+        "bouts": 1,
+        "points_attaque": 63,
+        "primes_attaque": [
+            "Double Poignée"
+        ],
+        "primes_defense": [],
+        "miseres": [],
+        "time": "07/03/2026, 16:30:00",
+        "scores": {
+            "Alice": 201.0,
+            "Hugo": -67.0,
+            "Eve": -67.0,
+            "Claire": -67.0
+        },
+        "related_message_ids": []
+    },
+    {
+        "message_id": 1700000000000000016,
+        "type": "partie",
+        "enchere": "GardeContre",
+        "multiplicateur": 6,
+        "preneur": "Alice",
+        "partenaire": null,
+        "defenseurs": [
+            "Hugo",
+            "David",
+            "Eve"
+        ],
+        "bouts": 2,
+        "points_attaque": 20,
+        "primes_attaque": [
+            "Chelem chuté"
+        ],
+        "primes_defense": [],
+        "miseres": [],
+        "time": "11/03/2026, 17:30:00",
+        "scores": {
+            "Alice": -228.0,
+            "Hugo": 76.0,
+            "David": 76.0,
+            "Eve": 76.0
+        },
+        "related_message_ids": []
+    },
+    {
+        "message_id": 1700000000000000017,
+        "type": "descendante",
+        "joueurs": [
+            "Claire",
+            "Alice",
+            "Gaëlle",
+            "Farid"
+        ],
+        "points": [
+            51,
+            8,
+            31,
+            33
+        ],
+        "miseres": [
+            "Alice"
+        ],
+        "time": "13/03/2026, 17:30:00",
+        "scores": {
+            "Claire": -81,
+            "Alice": 91,
+            "Gaëlle": -1,
+            "Farid": -9
+        },
+        "related_message_ids": []
+    },
+    {
+        "message_id": 1700000000000000018,
+        "type": "partie",
+        "enchere": "Garde",
+        "multiplicateur": 2,
+        "preneur": "Alice",
+        "partenaire": null,
+        "defenseurs": [
+            "Claire",
+            "Hugo",
+            "David"
+        ],
+        "bouts": 2,
+        "points_attaque": 63,
+        "primes_attaque": [],
+        "primes_defense": [],
+        "miseres": [],
+        "time": "19/03/2026, 17:30:00",
+        "scores": {
+            "Alice": 282.0,
+            "Claire": -94.0,
+            "Hugo": -94.0,
+            "David": -94.0
+        },
+        "related_message_ids": []
+    },
+    {
+        "message_id": 1700000000000000019,
+        "type": "partie",
+        "enchere": "GardeSans",
+        "multiplicateur": 4,
+        "preneur": "Alice",
+        "partenaire": null,
+        "defenseurs": [
+            "David",
+            "Eve",
+            "Farid"
+        ],
+        "bouts": 2,
+        "points_attaque": 33,
+        "primes_attaque": [
+            "Petit au bout"
+        ],
+        "primes_defense": [
+            "Triple Poignée"
+        ],
+        "miseres": [],
+        "time": "25/03/2026, 17:30:00",
+        "scores": {
+            "Alice": -396.0,
+            "David": 132.0,
+            "Eve": 132.0,
+            "Farid": 132.0
+        },
+        "related_message_ids": []
+    },
+    {
+        "message_id": 1700000000000000020,
+        "type": "partie",
+        "enchere": "GardeContre",
+        "multiplicateur": 6,
+        "preneur": "Farid",
+        "partenaire": null,
+        "defenseurs": [
+            "Eve",
+            "Claire"
+        ],
+        "bouts": 1,
+        "points_attaque": 32,
+        "primes_attaque": [
+            "Simple Poignée"
+        ],
+        "primes_defense": [
+            "Triple Poignée",
+            "Chelem annoncé"
+        ],
+        "miseres": [],
+        "time": "30/03/2026, 18:30:00",
+        "scores": {
+            "Farid": -648.0,
+            "Eve": 324.0,
+            "Claire": 324.0
+        },
+        "related_message_ids": []
+    },
+    {
+        "message_id": 1700000000000000021,
+        "type": "partie",
+        "enchere": "Petite",
+        "multiplicateur": 1,
+        "preneur": "Claire",
+        "partenaire": null,
+        "defenseurs": [
+            "Gaëlle",
+            "Hugo",
+            "Eve"
+        ],
+        "bouts": 2,
+        "points_attaque": 32,
+        "primes_attaque": [
+            "Simple Poignée",
+            "Petit au bout"
+        ],
+        "primes_defense": [],
+        "miseres": [],
+        "time": "05/04/2026, 18:30:00",
+        "scores": {
+            "Claire": -132.0,
+            "Gaëlle": 44.0,
+            "Hugo": 44.0,
+            "Eve": 44.0
+        },
+        "related_message_ids": []
+    },
+    {
+        "message_id": 1700000000000000022,
+        "type": "partie",
+        "enchere": "Garde",
+        "multiplicateur": 2,
+        "preneur": "David",
+        "partenaire": "Farid",
+        "defenseurs": [
+            "Claire",
+            "Eve",
+            "Alice"
+        ],
+        "bouts": 2,
+        "points_attaque": 53,
+        "primes_attaque": [],
+        "primes_defense": [
+            "Double Poignée"
+        ],
+        "miseres": [],
+        "time": "07/04/2026, 18:30:00",
+        "scores": {
+            "Farid": 104.0,
+            "David": 208.0,
+            "Claire": -104.0,
+            "Eve": -104.0,
+            "Alice": -104.0
+        },
+        "related_message_ids": []
+    },
+    {
+        "message_id": 1700000000000000023,
+        "type": "descendante",
+        "joueurs": [
+            "David",
+            "Bob",
+            "Gaëlle"
+        ],
+        "points": [
+            30,
+            4,
+            57
+        ],
+        "miseres": [
+            "Gaëlle"
+        ],
+        "time": "12/04/2026, 19:30:00",
+        "scores": {
+            "David": 1,
+            "Bob": 79,
+            "Gaëlle": -80
+        },
+        "related_message_ids": []
+    },
+    {
+        "message_id": 1700000000000000024,
+        "type": "partie",
+        "enchere": "GardeContre",
+        "multiplicateur": 6,
+        "preneur": "Farid",
+        "partenaire": "Bob",
+        "defenseurs": [
+            "Eve",
+            "David",
+            "Claire"
+        ],
+        "bouts": 1,
+        "points_attaque": 63,
+        "primes_attaque": [
+            "Chelem non annoncé"
+        ],
+        "primes_defense": [],
+        "miseres": [],
+        "time": "18/04/2026, 21:30:00",
+        "scores": {
+            "Bob": 422.0,
+            "Farid": 844.0,
+            "Eve": -422.0,
+            "David": -422.0,
+            "Claire": -422.0
+        },
+        "related_message_ids": []
+    },
+    {
+        "message_id": 1700000000000000025,
+        "type": "partie",
+        "enchere": "Garde",
+        "multiplicateur": 2,
+        "preneur": "Hugo",
+        "partenaire": null,
+        "defenseurs": [
+            "Alice",
+            "Claire",
+            "Bob"
+        ],
+        "bouts": 1,
+        "points_attaque": 62,
+        "primes_attaque": [
+            "Double Poignée",
+            "Chelem chuté"
+        ],
+        "primes_defense": [],
+        "miseres": [],
+        "time": "24/04/2026, 22:30:00",
+        "scores": {
+            "Hugo": -294.0,
+            "Alice": 98.0,
+            "Claire": 98.0,
+            "Bob": 98.0
+        },
+        "related_message_ids": []
+    },
+    {
+        "message_id": 1700000000000000026,
+        "type": "partie",
+        "enchere": "GardeContre",
+        "multiplicateur": 6,
+        "preneur": "Bob",
+        "partenaire": "Eve",
+        "defenseurs": [
+            "Farid",
+            "Gaëlle",
+            "Hugo"
+        ],
+        "bouts": 0,
+        "points_attaque": 46,
+        "primes_attaque": [
+            "Triple Poignée",
+            "Petit au bout"
+        ],
+        "primes_defense": [
+            "Chelem annoncé"
+        ],
+        "miseres": [
+            "Farid"
+        ],
+        "time": "01/05/2026, 00:30:00",
+        "scores": {
+            "Eve": -200.0,
+            "Bob": -390.0,
+            "Farid": 230.0,
+            "Gaëlle": 180.0,
+            "Hugo": 180.0
+        },
+        "related_message_ids": []
+    },
+    {
+        "message_id": 1700000000000000027,
+        "type": "partie",
+        "enchere": "Petite",
+        "multiplicateur": 1,
+        "preneur": "David",
+        "partenaire": null,
+        "defenseurs": [
+            "Farid",
+            "Hugo",
+            "Gaëlle"
+        ],
+        "bouts": 3,
+        "points_attaque": 38,
+        "primes_attaque": [],
+        "primes_defense": [
+            "Double Poignée"
+        ],
+        "miseres": [],
+        "time": "06/05/2026, 02:30:00",
+        "scores": {
+            "David": 171.0,
+            "Farid": -57.0,
+            "Hugo": -57.0,
+            "Gaëlle": -57.0
+        },
+        "related_message_ids": []
+    },
+    {
+        "message_id": 1700000000000000028,
+        "type": "partie",
+        "enchere": "GardeContre",
+        "multiplicateur": 6,
+        "preneur": "Farid",
+        "partenaire": "Eve",
+        "defenseurs": [
+            "David",
+            "Claire",
+            "Alice"
+        ],
+        "bouts": 3,
+        "points_attaque": 65,
+        "primes_attaque": [
+            "Petit au bout"
+        ],
+        "primes_defense": [],
+        "miseres": [],
+        "time": "11/05/2026, 02:30:00",
+        "scores": {
+            "Eve": 384.0,
+            "Farid": 768.0,
+            "David": -384.0,
+            "Claire": -384.0,
+            "Alice": -384.0
+        },
+        "related_message_ids": []
+    },
+    {
+        "message_id": 1700000000000000029,
+        "type": "descendante",
+        "joueurs": [
+            "Eve",
+            "Farid",
+            "Alice",
+            "Bob"
+        ],
+        "points": [
+            38,
+            44,
+            18,
+            44
+        ],
+        "miseres": [
+            "Eve"
+        ],
+        "time": "15/05/2026, 03:30:00",
+        "scores": {
+            "Eve": -8,
+            "Farid": -32,
+            "Alice": 72,
+            "Bob": -32
+        },
+        "related_message_ids": []
+    },
+    {
+        "message_id": 1700000000000000030,
+        "type": "partie",
+        "enchere": "GardeSans",
+        "multiplicateur": 4,
+        "preneur": "Claire",
+        "partenaire": null,
+        "defenseurs": [
+            "David",
+            "Bob"
+        ],
+        "bouts": 3,
+        "points_attaque": 46,
+        "primes_attaque": [
+            "Triple Poignée"
+        ],
+        "primes_defense": [
+            "Simple Poignée"
+        ],
+        "miseres": [],
+        "time": "19/05/2026, 04:30:00",
+        "scores": {
+            "Claire": 400.0,
+            "David": -200.0,
+            "Bob": -200.0
+        },
+        "related_message_ids": []
+    },
+    {
+        "message_id": 1700000000000000031,
+        "type": "partie",
+        "enchere": "Petite",
+        "multiplicateur": 1,
+        "preneur": "Alice",
+        "partenaire": null,
+        "defenseurs": [
+            "Bob",
+            "Gaëlle"
+        ],
+        "bouts": 1,
+        "points_attaque": 70,
+        "primes_attaque": [],
+        "primes_defense": [],
+        "miseres": [],
+        "time": "24/05/2026, 04:30:00",
+        "scores": {
+            "Alice": 88.0,
+            "Bob": -44.0,
+            "Gaëlle": -44.0
+        },
+        "related_message_ids": []
+    },
+    {
+        "message_id": 1700000000000000032,
+        "type": "partie",
+        "enchere": "Garde",
+        "multiplicateur": 2,
+        "preneur": "Claire",
+        "partenaire": null,
+        "defenseurs": [
+            "Hugo",
+            "Eve"
+        ],
+        "bouts": 0,
+        "points_attaque": 53,
+        "primes_attaque": [
+            "Double Poignée",
+            "Petit au bout"
+        ],
+        "primes_defense": [],
+        "miseres": [],
+        "time": "27/05/2026, 04:30:00",
+        "scores": {
+            "Claire": -132.0,
+            "Hugo": 66.0,
+            "Eve": 66.0
+        },
+        "related_message_ids": []
+    },
+    {
+        "message_id": 1700000000000000033,
+        "type": "partie",
+        "enchere": "Garde",
+        "multiplicateur": 2,
+        "preneur": "Bob",
+        "partenaire": null,
+        "defenseurs": [
+            "Eve",
+            "Alice",
+            "Farid"
+        ],
+        "bouts": 0,
+        "points_attaque": 44,
+        "primes_attaque": [],
+        "primes_defense": [],
+        "miseres": [],
+        "time": "29/05/2026, 05:30:00",
+        "scores": {
+            "Bob": -222.0,
+            "Eve": 74.0,
+            "Alice": 74.0,
+            "Farid": 74.0
+        },
+        "related_message_ids": []
+    },
+    {
+        "message_id": 1700000000000000034,
+        "type": "partie",
+        "enchere": "Garde",
+        "multiplicateur": 2,
+        "preneur": "Claire",
+        "partenaire": null,
+        "defenseurs": [
+            "Alice",
+            "Gaëlle",
+            "Farid"
+        ],
+        "bouts": 0,
+        "points_attaque": 54,
+        "primes_attaque": [],
+        "primes_defense": [],
+        "miseres": [],
+        "time": "01/06/2026, 07:30:00",
+        "scores": {
+            "Claire": -162.0,
+            "Alice": 54.0,
+            "Gaëlle": 54.0,
+            "Farid": 54.0
+        },
+        "related_message_ids": []
+    },
+    {
+        "message_id": 1700000000000000035,
+        "type": "descendante",
+        "joueurs": [
+            "Hugo",
+            "Claire",
+            "Farid"
+        ],
+        "points": [
+            48,
+            27,
+            44
+        ],
+        "miseres": [],
+        "time": "06/06/2026, 09:30:00",
+        "scores": {
+            "Hugo": -25,
+            "Claire": 38,
+            "Farid": -13
+        },
+        "related_message_ids": []
+    }
+]

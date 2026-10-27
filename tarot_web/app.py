@@ -125,22 +125,29 @@ def parse_form(data):
 
 
 async def create_app(*, http=None, config=None):
-    config = config or {
-        key: setting(key)
-        for key in (
-            "DISCORD_OAUTH_CLIENT_ID",
-            "DISCORD_OAUTH_CLIENT_SECRET",
-            "DISCORD_OAUTH_REDIRECT_URI",
-            "WEB_SESSION_SECRET",
-            "TAROT_INTERNAL_TOKEN",
-        )
-    }
+    debug = (
+        config.get("TAROT_DEBUG") == "1"
+        if config is not None
+        else os.environ.get("TAROT_DEBUG") == "1"
+    )
+    if debug and os.environ.get("DISCORD_TOKEN"):
+        raise ValueError("DISCORD_TOKEN ne doit pas être défini en debug")
+    if config is None:
+        keys = ["WEB_SESSION_SECRET", "TAROT_INTERNAL_TOKEN"]
+        if not debug:
+            keys = [
+                "DISCORD_OAUTH_CLIENT_ID",
+                "DISCORD_OAUTH_CLIENT_SECRET",
+                "DISCORD_OAUTH_REDIRECT_URI",
+                *keys,
+            ]
+        config = {key: setting(key) for key in keys}
     guild_id = (
         config.get("DISCORD_GUILD_ID")
         if "DISCORD_GUILD_ID" in config
         else os.environ.get("DISCORD_GUILD_ID", "")
     ) or ""
-    if not config["DISCORD_OAUTH_REDIRECT_URI"].startswith("https://"):
+    if not debug and not config["DISCORD_OAUTH_REDIRECT_URI"].startswith("https://"):
         raise ValueError("Redirection OAuth non HTTPS")
     if len(config["WEB_SESSION_SECRET"]) < 32 or len(config["TAROT_INTERNAL_TOKEN"]) < 32:
         raise ValueError("Secrets trop courts : générer des valeurs aléatoires longues")
@@ -151,6 +158,12 @@ async def create_app(*, http=None, config=None):
     pending_login = {}
     secret = config["TAROT_INTERNAL_TOKEN"]
     session_secret = config["WEB_SESSION_SECRET"].encode()
+
+    def page(name, **context):
+        context.setdefault("debug", debug)
+        context.setdefault("debug_data_dir", os.environ.get("TAROT_DEBUG_DATA_DIR", "/data"))
+        context.setdefault("debug_commit", os.environ.get("GIT_COMMIT", "unknown"))
+        return render(name, **context)
 
     def signed_cookie(sid):
         return f"{sid}.{hmac.digest(session_secret, sid.encode(), 'sha256').hex()}"
@@ -186,10 +199,27 @@ async def create_app(*, http=None, config=None):
         except (OSError, TimeoutError) as exc:
             raise web.HTTPServiceUnavailable(text="Bot indisponible") from exc
 
+    debug_session = {
+        "access": "",
+        "user": {
+            "id": "1",
+            "name": os.environ.get("TAROT_DEBUG_USER_NAME", "Debug User"),
+        },
+        "csrf": secrets.token_urlsafe(32),
+        "expires": float("inf"),
+        "guild_checked": float("inf"),
+        "preview": None,
+        "commits": deque(),
+    }
+
     @web.middleware
     async def secure(request, handler):
         request[SESSION_KEY] = None
-        if request.path not in (
+        if not debug and request.path.startswith("/debug/"):
+            raise web.HTTPNotFound()
+        if debug:
+            request[SESSION_KEY] = debug_session
+        elif request.path not in (
             "/login",
             "/auth/discord",
             "/oauth/callback",
@@ -216,10 +246,15 @@ async def create_app(*, http=None, config=None):
             session = request[SESSION_KEY]
             if session is None:
                 raise web.HTTPForbidden()
-            data = await request.post()
-            request[FORM_KEY] = data
-            if not hmac.compare_digest(str(data.get("csrf", "")), session["csrf"]):
-                raise web.HTTPForbidden(text="Jeton de formulaire incorrect")
+            if request.path == "/debug/command":
+                supplied = request.headers.get("X-CSRF-Token", "")
+                if not hmac.compare_digest(supplied, session["csrf"]):
+                    raise web.HTTPForbidden(text="Jeton de formulaire incorrect")
+            else:
+                data = await request.post()
+                request[FORM_KEY] = data
+                if not hmac.compare_digest(str(data.get("csrf", "")), session["csrf"]):
+                    raise web.HTTPForbidden(text="Jeton de formulaire incorrect")
         response = await handler(request)
         response.headers["Content-Security-Policy"] = (
             "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; object-src 'none'; frame-ancestors 'none'; base-uri 'none'; form-action 'self'"
@@ -231,9 +266,13 @@ async def create_app(*, http=None, config=None):
         return response
 
     async def login(_request):
-        return render("login.html")
+        if debug:
+            raise web.HTTPFound("/")
+        return page("login.html")
 
     async def start_discord_login(_request):
+        if debug:
+            raise web.HTTPFound("/")
         nonce = secrets.token_urlsafe(32)
         now = time.monotonic()
         for sid, session in list(sessions.items()):
@@ -259,6 +298,8 @@ async def create_app(*, http=None, config=None):
         raise response
 
     async def callback(request):
+        if debug:
+            raise web.HTTPFound("/")
         nonce = request.query.get("state", "")
         cookie_nonce = request.cookies.get("oauth_state", "")
         if (
@@ -317,7 +358,7 @@ async def create_app(*, http=None, config=None):
         history = snapshot["history"]
         players = snapshot["players"]
         names = known_players(history, players)
-        return render(
+        return page(
             "home.html",
             rows=statistics(history, players),
             recent=list(reversed(history[-10:])),
@@ -327,6 +368,8 @@ async def create_app(*, http=None, config=None):
         )
 
     async def logout(request):
+        if debug:
+            raise web.HTTPFound("/")
         sid = verify_cookie(request.cookies.get(COOKIE, ""))
         sessions.pop(sid, None)
         result = web.HTTPFound("/login")
@@ -334,7 +377,7 @@ async def create_app(*, http=None, config=None):
         raise result
 
     def game_page(request, names, form=None, *, error="", scores=None, commit_id=""):
-        return render(
+        return page(
             "game.html",
             players=names,
             primes=list(PRIMES),
@@ -409,9 +452,47 @@ async def create_app(*, http=None, config=None):
             ) from exc
         session["preview"] = None
         recent.append(now)
-        return render(
-            "saved.html", message_id=result["message_id"], table_sent=result.get("table_sent", True)
+        return page(
+            "saved.html",
+            message_id=result["message_id"],
+            table_sent=result.get("table_sent", True),
+            csrf=request[SESSION_KEY]["csrf"],
         )
+
+    async def debug_console(request):
+        return page(
+            "console.html",
+            user=request[SESSION_KEY]["user"],
+            csrf=request[SESSION_KEY]["csrf"],
+        )
+
+    async def debug_command(request):
+        try:
+            payload = await request.json()
+            async with http.post(
+                "http://tarotbot:8081/debug/command",
+                json=payload,
+                headers={"Authorization": f"Bearer {secret}"},
+            ) as response:
+                if response.status != 200:
+                    raise web.HTTPServiceUnavailable(text="Console indisponible")
+                return web.json_response(await response.json())
+        except (OSError, TimeoutError) as exc:
+            raise web.HTTPServiceUnavailable(text="Bot indisponible") from exc
+        except (TypeError, ValueError) as exc:
+            raise web.HTTPBadRequest(text=str(exc)) from exc
+
+    async def debug_reset(_request):
+        try:
+            async with http.post(
+                "http://tarotbot:8081/debug/reset",
+                headers={"Authorization": f"Bearer {secret}"},
+            ) as response:
+                if response.status != 200:
+                    raise web.HTTPServiceUnavailable(text="Réinitialisation indisponible")
+        except (OSError, TimeoutError) as exc:
+            raise web.HTTPServiceUnavailable(text="Bot indisponible") from exc
+        raise web.HTTPFound("/")
 
     app = web.Application(middlewares=[secure], client_max_size=16384)
     app.router.add_get("/login", login)
@@ -422,6 +503,9 @@ async def create_app(*, http=None, config=None):
     app.router.add_get("/game", game)
     app.router.add_post("/preview", preview)
     app.router.add_post("/commit", commit)
+    app.router.add_get("/debug/chat", debug_console)
+    app.router.add_post("/debug/command", debug_command)
+    app.router.add_post("/debug/reset", debug_reset)
     app.router.add_static("/static/", ROOT / "static")
     app.on_cleanup.append(close_sessions)
     if owns_http:

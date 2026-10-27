@@ -17,6 +17,10 @@ players.json
 history.json
 curves.png
 
+# fixtures de debug (versionnées)
+!tarot_debug/fixtures/players.json
+!tarot_debug/fixtures/history.json
+
 # test python file
 xp.py
 
@@ -25,5 +29,15 @@ AGENTS.md
 
 # prototypes et scripts d'analyse locaux
 sandbox/
+
+# config des skills (local)
+docs/agents/
+
+# issues locales (tracker markdown)
+.scratch/
+
+# environnement de debug
+data-debug/
+.env.debug
 
 .idea/
