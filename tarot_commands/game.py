@@ -1,3 +1,4 @@
+from contextlib import suppress
 from typing import Any
 
 import discord
@@ -39,6 +40,7 @@ class ParseError(Exception):
 
 
 ENCHERE_NAMES = {1: "Petite", 2: "Garde", 4: "GardeSans", 6: "GardeContre"}
+ENCHERE_KEYWORDS = {"petite", "garde"}
 
 EXPIRED_MSG = "Saisie expirée ou introuvable. Relance la commande."
 
@@ -257,22 +259,79 @@ class SelectPrimes(discord.ui.Select):
         await interaction.response.send_message(content=f"Choix: {self.values!s}!", ephemeral=True)
 
 
-def _bind_calcul_view(session: GameSession, view: discord.ui.View) -> discord.ui.View:
-    """Associe la View Calcul a la session ; les timeouts des anciennes Views sont ignores."""
+def _bind_view(session: GameSession, view: discord.ui.View) -> discord.ui.View:
+    """Associe la View a la session ; les timeouts des anciennes Views sont ignores."""
     session.view_generation += 1
-    # Attributs dynamiques lus ensuite via getattr dans _expire_calcul_view
+    # Attributs dynamiques lus ensuite via getattr dans _expire_view
     bound: Any = view
     bound.request_message_id = session.request_message_id
     bound.view_generation = session.view_generation
     return view
 
 
-async def _expire_calcul_view(view: discord.ui.View):
+def bind_confirmation_message(view: discord.ui.View, message):
+    """Associe la réponse Discord à sa vue pour pouvoir l'expirer proprement."""
+    bound: Any = view
+    bound.message = message
+
+
+async def update_confirmation_response(channel, session, content, view):
+    if channel is None:
+        return
+
+    if session.confirm_message_id is not None:
+        try:
+            confirm = await channel.fetch_message(session.confirm_message_id)
+            await confirm.edit(content=content, view=view)
+        except discord.HTTPException:
+            confirm = await channel.send(content, view=view)
+    else:
+        confirm = await channel.send(content, view=view)
+
+    session.confirm_message_id = confirm.id
+    bind_confirmation_message(view, confirm)
+
+
+async def send_parse_error(ctx, session: GameSession, command_name: str, text: str):
+    """Affiche une erreur de saisie corrigeable : la session reste pending 180 s."""
+    session.clear_parse_state()
+    view = SessionExpiryView(session.request_message_id)
+    confirm = await ctx.send(error_message(command_name, text), view=view)
+    session.confirm_message_id = confirm.id
+    bind_confirmation_message(view, confirm)
+
+
+async def _expire_view(view: discord.ui.View):
     session = get_session(getattr(view, "request_message_id", None))
     if session is None:
         return
-    if getattr(view, "view_generation", None) == session.view_generation:
-        pop_session(session.request_message_id)
+    if getattr(view, "view_generation", None) != session.view_generation:
+        return
+
+    pop_session(session.request_message_id)
+    message = getattr(view, "message", None)
+    if message is None:
+        return
+    try:
+        await message.edit(content=EXPIRED_MSG, view=None)
+    except discord.HTTPException:
+        with suppress(discord.HTTPException):
+            await message.channel.send(EXPIRED_MSG)
+
+
+class SessionExpiryView(discord.ui.View):
+    """Vue sans boutons gardant une saisie en erreur modifiable pendant 180 s."""
+
+    def __init__(self, request_message_id: int, *, timeout=180):
+        super().__init__(timeout=timeout)
+        self.request_message_id = request_message_id
+        self.view_generation = 0
+        session = get_session(request_message_id)
+        if session is not None:
+            _bind_view(session, self)
+
+    async def on_timeout(self):
+        await _expire_view(self)
 
 
 class SelectViewGame(discord.ui.View):
@@ -420,10 +479,10 @@ class GameCalculButton(discord.ui.View):
         self.view_generation = 0
         session = get_session(request_message_id)
         if session is not None:
-            _bind_calcul_view(session, self)
+            _bind_view(session, self)
 
     async def on_timeout(self):
-        await _expire_calcul_view(self)
+        await _expire_view(self)
 
     @discord.ui.button(label="Calcul", style=discord.ButtonStyle.blurple)
     async def calcul(self, interaction: discord.Interaction, button: discord.ui.Button):
@@ -452,10 +511,10 @@ class DescendanteCalculButton(discord.ui.View):
         self.view_generation = 0
         session = get_session(request_message_id)
         if session is not None:
-            _bind_calcul_view(session, self)
+            _bind_view(session, self)
 
     async def on_timeout(self):
-        await _expire_calcul_view(self)
+        await _expire_view(self)
 
     @discord.ui.button(label="Calcul", style=discord.ButtonStyle.blurple)
     async def calcul(self, interaction: discord.Interaction, button: discord.ui.Button):
@@ -770,15 +829,15 @@ def autoparse(msg, session: GameSession):
 
     preneur_token = msg_list[0]
     preneur = resolve_player(preneur_token, PLAYERS, names)
-    if preneur is None:
-        if unidecode(preneur_token).lower() in ["desc", "descendante"]:
-            return autoparse_desc(msg, session)
+    if preneur is None and unidecode(preneur_token).lower() in ["desc", "descendante"]:
+        return autoparse_desc(msg, session)
+    if preneur is not None:
+        session.game_players["Preneur"] = [preneur]
+    elif unidecode(preneur_token).lower() in ENCHERE_KEYWORDS:
         raise ParseError(
-            f"Le premier mot doit être le preneur, déjà ajouté au classement, "
-            f"ou desc / descendante. « {preneur_token} » n’est pas un joueur. "
-            f"Vérifie l’orthographe, ou ajoute-le avec `t/add_player {preneur_token}`."
+            "Il manque le preneur, placé avant l’enchère. "
+            "Exemple : `t/auto Alice garde 45 2 vs Bob Carol`"
         )
-    session.game_players["Preneur"] = [preneur]
 
     if "petite" in msg.lower():
         session.enchere = 1
@@ -907,6 +966,62 @@ def autoparse(msg, session: GameSession):
         key=lambda c: c[1],
     )
 
+    # find score: assume it's the only number over 4 separated by spaces in the msg
+    for e in msg_list:
+        found_scores = 0
+        if e.isnumeric() and int(e) >= 4:
+            session.points_attaque = int(e)
+            found_scores += 1
+        if found_scores > 1:
+            raise ParseError(
+                "Un seul score (un nombre supérieur ou égal à 4). Les bouts restent 0, 1, 2 ou 3."
+            )
+
+    if session.points_attaque is None:
+        raise ParseError(
+            "Il manque le score de l’attaque : un nombre supérieur ou égal à 4. "
+            "Exemple : `t/auto Alice garde 45 2 vs Bob Carol`"
+        )
+
+    unknown_players = []
+    if preneur is None:
+        unknown_players.append(preneur_token)
+    if avec_idx is not None:
+        unknown_players.extend(
+            token
+            for token in msg_list[avec_idx + 1 : vs_idx]
+            if token and not token.isnumeric() and resolve_player(token, PLAYERS, names) is None
+        )
+    for seg_name, seg_position in segments_idx:
+        if seg_name != "vs":
+            continue
+        next_seg_position = next(
+            (position for name, position in segments_idx if position > seg_position),
+            None,
+        )
+        defense_tokens = msg_list[seg_position + 1 : next_seg_position]
+        unknown_players.extend(
+            token
+            for token in defense_tokens
+            if token and not token.isnumeric() and resolve_player(token, PLAYERS, names) is None
+        )
+
+    unknown_players = list(dict.fromkeys(unknown_players))
+    if unknown_players:
+        unknown_display = ", ".join(f"« {name} »" for name in unknown_players)
+        if len(unknown_players) == 1:
+            add_command = f"`t/add_player {unknown_players[0]}`"
+            verb = "n’est pas"
+            pronoun = "l’ajouter"
+        else:
+            add_command = f"`t/add_players {' '.join(unknown_players)}`"
+            verb = "ne sont pas"
+            pronoun = "les ajouter"
+        raise ParseError(
+            f"{unknown_display} {verb} dans la liste des joueurs. Vérifie l’orthographe, "
+            f"ou tu peux {pronoun} avec {add_command}."
+        )
+
     # handle segment by segment
     for seg_idx, (seg_name, seg_position) in enumerate(segments_idx):
         next_seg_position = (
@@ -956,23 +1071,6 @@ def autoparse(msg, session: GameSession):
             found_bouts += 1
         if found_bouts > 1:
             raise ParseError("Un seul nombre de bouts : 0, 1, 2 ou 3.")
-
-    # find score: assume it's the only number over 4 separated by spaces in the msg
-    for e in msg_list:
-        found_scores = 0
-        if e.isnumeric() and int(e) >= 4:
-            session.points_attaque = int(e)
-            found_scores += 1
-        if found_scores > 1:
-            raise ParseError(
-                "Un seul score (un nombre supérieur ou égal à 4). Les bouts restent 0, 1, 2 ou 3."
-            )
-
-    if session.points_attaque is None:
-        raise ParseError(
-            "Il manque le score de l’attaque : un nombre supérieur ou égal à 4. "
-            "Exemple : `t/auto Alice garde 45 2 vs Bob Carol`"
-        )
 
     session.kind = "partie"
     reparse = (
@@ -1074,9 +1172,10 @@ def handle_auto_edit(message_id: int, new_content: str, author_id: int, history=
         try:
             new_reparse = autoparse(body, trial)
         except ParseError as e:
+            session.clear_parse_state()
             return "error", e.args[0]
         if new_reparse == session.reparse:
-            return "noop", None
+            return "noop", session
         session.copy_parse_from(trial)
         return "updated", session
 
@@ -1126,18 +1225,13 @@ async def auto(ctx, *, value):
     try:
         reparse = autoparse(value, session)
     except ParseError as e:
-        pop_session(rid)
-        await ctx.send(error_message("auto", e.args[0]))
+        await send_parse_error(ctx, session, "auto", e.args[0])
         return
 
     if session.kind == "descendante" or reparse.startswith("Descendante:\n"):
-        confirm = await ctx.send(
-            confirm_message_content(session),
-            view=DescendanteCalculButton(rid),
-        )
+        view = DescendanteCalculButton(rid)
     else:
-        confirm = await ctx.send(
-            confirm_message_content(session),
-            view=GameCalculButton(rid),
-        )
+        view = GameCalculButton(rid)
+    confirm = await ctx.send(confirm_message_content(session), view=view)
     session.confirm_message_id = confirm.id
+    bind_confirmation_message(view, confirm)

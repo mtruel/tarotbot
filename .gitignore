@@ -23,4 +23,7 @@ xp.py
 # consignes d'atelier (local)
 AGENTS.md
 
+# prototypes et scripts d'analyse locaux
+sandbox/
+
 .idea/

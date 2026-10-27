@@ -14,11 +14,14 @@ from tarot_commands.export import export
 from tarot_commands.game import (
     DescendanteCalculButton,
     GameCalculButton,
+    SessionExpiryView,
     auto,
     confirm_message_content,
     descendante,
     game,
+    get_session,
     handle_auto_edit,
+    update_confirmation_response,
 )
 from tarot_commands.help import error_message, explain_command_error, help, more_info
 from tarot_commands.history import history
@@ -106,40 +109,53 @@ async def on_message_edit(before, after):
 
     action, payload = handle_edit_message_edit(after.id, after.content, after.author.id)
     if action != "ignore":
-        if action == "updated":
-            session = payload
-            content = confirm_message_content(session)
+        session = get_session(after.id)
+        if action in {"updated", "noop"} and session is not None:
             view = EditOverwriteButton(session.request_message_id)
-            if session.confirm_message_id and after.channel:
-                try:
-                    confirm = await after.channel.fetch_message(session.confirm_message_id)
-                    await confirm.edit(content=content, view=view)
-                except discord.HTTPException:
-                    await after.channel.send(content, view=view)
-            return
-        if action == "error":
-            await after.channel.send(error_message("edit", payload))
+            await update_confirmation_response(
+                after.channel,
+                session,
+                confirm_message_content(session),
+                view,
+            )
+        elif action == "error" and session is not None:
+            view = SessionExpiryView(session.request_message_id)
+            await update_confirmation_response(
+                after.channel,
+                session,
+                error_message("edit", payload),
+                view,
+            )
         return
 
     action, payload = handle_auto_edit(after.id, after.content, after.author.id)
 
-    if action == "updated":
-        session = payload
-        content = confirm_message_content(session)
+    if action in {"updated", "noop"}:
+        session = get_session(after.id)
+        if session is None:
+            return
         if session.kind == "descendante" or session.reparse.startswith("Descendante:\n"):
             view = DescendanteCalculButton(session.request_message_id)
         else:
             view = GameCalculButton(session.request_message_id)
-        if session.confirm_message_id and after.channel:
-            try:
-                confirm = await after.channel.fetch_message(session.confirm_message_id)
-                await confirm.edit(content=content, view=view)
-            except discord.HTTPException:
-                await after.channel.send(content, view=view)
+        await update_confirmation_response(
+            after.channel,
+            session,
+            confirm_message_content(session),
+            view,
+        )
         return
 
     if action == "error":
-        await after.channel.send(error_message("auto", payload))
+        session = get_session(after.id)
+        if session is not None:
+            view = SessionExpiryView(session.request_message_id)
+            await update_confirmation_response(
+                after.channel,
+                session,
+                error_message("auto", payload),
+                view,
+            )
         return
 
     if action == "warn":

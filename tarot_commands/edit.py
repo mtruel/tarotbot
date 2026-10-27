@@ -8,14 +8,16 @@ from discord.ext import commands
 from tarot_commands.game import (
     EXPIRED_MSG,
     ParseError,
-    _bind_calcul_view,
-    _expire_calcul_view,
+    _bind_view,
+    _expire_view,
     autoparse,
+    bind_confirmation_message,
     confirm_message_content,
     descendante_details,
     finalize_descendante_scores,
     finalize_partie_scores,
     partie_details,
+    send_parse_error,
     send_score_table,
 )
 from tarot_commands.help import error_message
@@ -106,6 +108,7 @@ def handle_edit_message_edit(message_id: int, new_content: str, author_id: int):
     if body is None:
         return "ignore", None
     if not body.strip():
+        session.clear_parse_state()
         return "error", (
             "Il manque le nouveau contenu (comme après `t/auto`). "
             f"Exemple : `t/edit {session.edit_target_message_id} Alice garde 50 2 vs Bob Carol`"
@@ -115,9 +118,10 @@ def handle_edit_message_edit(message_id: int, new_content: str, author_id: int):
     try:
         new_reparse = autoparse(body, trial)
     except ParseError as e:
+        session.clear_parse_state()
         return "error", e.args[0]
     if new_reparse == session.reparse:
-        return "noop", None
+        return "noop", session
     session.copy_parse_from(trial)
     return "updated", session
 
@@ -129,10 +133,10 @@ class EditOverwriteButton(discord.ui.View):
         self.view_generation = 0
         session = get_session(request_message_id)
         if session is not None:
-            _bind_calcul_view(session, self)
+            _bind_view(session, self)
 
     async def on_timeout(self):
-        await _expire_calcul_view(self)
+        await _expire_view(self)
 
     @discord.ui.button(label="Écraser", style=discord.ButtonStyle.danger)
     async def ecraser(self, interaction: discord.Interaction, button: discord.ui.Button):
@@ -211,16 +215,6 @@ async def edit(ctx, *, value: str = ""):
         )
         return
 
-    if not body.strip():
-        await ctx.send(
-            error_message(
-                "edit",
-                "Il manque le nouveau contenu (comme après `t/auto`). "
-                f"Exemple : `t/edit {target_id} Alice garde 50 2 vs Bob Carol`",
-            )
-        )
-        return
-
     history = load_history()
     entry = find_history_by_message_id(history, target_id)
     if entry is None:
@@ -241,15 +235,23 @@ async def edit(ctx, *, value: str = ""):
     )
     session.edit_target_message_id = entry.get("message_id", target_id)
 
+    if not body.strip():
+        await send_parse_error(
+            ctx,
+            session,
+            "edit",
+            "Il manque le nouveau contenu (comme après `t/auto`). "
+            f"Exemple : `t/edit {target_id} Alice garde 50 2 vs Bob Carol`",
+        )
+        return
+
     try:
         autoparse(body, session)
     except ParseError as e:
-        pop_session(rid)
-        await ctx.send(error_message("edit", e.args[0]))
+        await send_parse_error(ctx, session, "edit", e.args[0])
         return
 
-    confirm = await ctx.send(
-        confirm_message_content(session),
-        view=EditOverwriteButton(rid),
-    )
+    view = EditOverwriteButton(rid)
+    confirm = await ctx.send(confirm_message_content(session), view=view)
     session.confirm_message_id = confirm.id
+    bind_confirmation_message(view, confirm)

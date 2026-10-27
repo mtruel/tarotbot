@@ -11,7 +11,10 @@ import unittest
 import zipfile
 from datetime import datetime
 from pathlib import Path
+from types import SimpleNamespace
 from unittest.mock import AsyncMock, patch
+
+import discord
 
 import curves
 from tarot_commands import game
@@ -36,6 +39,7 @@ from tarot_commands.edit import (
     resolve_edit_target,
     strip_optional_auto_prefix,
 )
+from tarot_commands.edit import edit as edit_command
 from tarot_commands.export_lib import build_export
 from tarot_commands.history import (
     append_related_message_id,
@@ -609,6 +613,231 @@ class StateTests(unittest.TestCase):
         )
         self.assertEqual(action, "noop")
         game.reset_cache()
+
+    def test_auto_error_keeps_session_for_edit_correction(self):
+        async def exercise():
+            game.reset_cache()
+            save_player_names(["Alice", "Bob", "Carol", "Mathias", "Driss", "Clement", "Julien"])
+            ctx = AsyncMock()
+            ctx.message.id = 500
+            ctx.channel.id = 1
+            ctx.author.id = 42
+            error_msg = AsyncMock()
+            error_msg.id = 999
+            ctx.send = AsyncMock(return_value=error_msg)
+
+            await game.auto.callback(
+                ctx, value="Alice garde 41 1 avec Driss vs Clement Julien Matthias"
+            )
+            sent = ctx.send.call_args.args[0]
+            self.assertIn("« Matthias » n’est pas dans la liste des joueurs", sent)
+            session = game.get_session(500)
+            self.assertIsNotNone(session)
+            self.assertEqual(session.confirm_message_id, 999)
+            self.assertIsInstance(ctx.send.call_args.kwargs["view"], game.SessionExpiryView)
+
+            action, payload = game.handle_auto_edit(
+                500,
+                "t/auto Alice garde 41 1 avec Driss vs Clement Julien Mathias",
+                42,
+            )
+            self.assertEqual(action, "updated")
+            self.assertEqual(len(payload.game_players["Défenseurs"]), 3)
+            game.reset_cache()
+
+        asyncio.run(exercise())
+
+    def test_edit_error_keeps_session_for_correction(self):
+        game.reset_cache()
+        save_player_names(["Alice", "Bob", "Carol"])
+        save_history([{"message_id": 1557730091864301699, "type": "partie", "scores": {}}])
+        ctx = AsyncMock()
+        ctx.message.id = 502
+        ctx.message.reference = None
+        ctx.channel.id = 1
+        ctx.author.id = 42
+        error_message = AsyncMock()
+        error_message.id = 888
+        ctx.send = AsyncMock(return_value=error_message)
+
+        asyncio.run(
+            edit_command.callback(
+                ctx,
+                value="1557730091864301699 Alice garde 45 2 vs Bob Matthias",
+            )
+        )
+
+        session = game.get_session(502)
+        self.assertIsNotNone(session)
+        self.assertEqual(session.confirm_message_id, 888)
+        self.assertIsInstance(ctx.send.call_args.kwargs["view"], game.SessionExpiryView)
+        self.assertIn("« Matthias » n’est pas", ctx.send.call_args.args[0])
+
+        action, payload = handle_edit_message_edit(
+            502,
+            "t/edit 1557730091864301699 Alice garde 45 2 vs Bob Carol",
+            42,
+        )
+        self.assertEqual(action, "updated")
+        self.assertEqual(payload.game_players["Défenseurs"], ["Bob", "Carol"])
+        game.reset_cache()
+
+    def test_confirmation_response_edits_or_recreates_message(self):
+        async def exercise():
+            game.reset_cache()
+            session = game.create_session(505, source="auto")
+            session.confirm_message_id = 900
+            view = game.SessionExpiryView(505)
+            channel = AsyncMock()
+            original = AsyncMock()
+            original.id = 900
+            channel.fetch_message = AsyncMock(return_value=original)
+
+            await game.update_confirmation_response(channel, session, "Récapitulatif", view)
+
+            original.edit.assert_awaited_once_with(content="Récapitulatif", view=view)
+            channel.send.assert_not_awaited()
+            self.assertEqual(session.confirm_message_id, 900)
+            self.assertIs(view.message, original)
+
+            fallback_session = game.create_session(506, source="auto")
+            fallback_session.confirm_message_id = 901
+            fallback_view = game.SessionExpiryView(506)
+            fallback_channel = AsyncMock()
+            fallback_channel.fetch_message = AsyncMock(
+                side_effect=discord.HTTPException(
+                    SimpleNamespace(status=404, reason="Not Found"),
+                    "message was deleted",
+                )
+            )
+            replacement = AsyncMock()
+            replacement.id = 902
+            fallback_channel.send = AsyncMock(return_value=replacement)
+
+            await game.update_confirmation_response(
+                fallback_channel,
+                fallback_session,
+                "Récapitulatif",
+                fallback_view,
+            )
+
+            fallback_channel.send.assert_awaited_once_with("Récapitulatif", view=fallback_view)
+            self.assertEqual(fallback_session.confirm_message_id, 902)
+            self.assertIs(fallback_view.message, replacement)
+            game.reset_cache()
+
+        asyncio.run(exercise())
+
+    def test_session_expiry_updates_original_confirmation(self):
+        async def exercise():
+            game.reset_cache()
+            game.create_session(503, source="auto")
+            view = game.SessionExpiryView(503)
+            message = AsyncMock()
+            game.bind_confirmation_message(view, message)
+
+            await view.on_timeout()
+
+            self.assertIsNone(game.get_session(503))
+            message.edit.assert_awaited_once_with(content=game.EXPIRED_MSG, view=None)
+
+        asyncio.run(exercise())
+
+    def test_autoparse_reports_all_unknown_attack_and_defense_players(self):
+        game.reset_cache()
+        session = game.create_session(501, source="auto")
+
+        with self.assertRaises(game.ParseError) as raised:
+            game.autoparse(
+                "Alicia garde 45 2 avec Matthis vs Bob Matthias",
+                session,
+            )
+
+        message = str(raised.exception)
+        self.assertIn("« Alicia »", message)
+        self.assertIn("« Matthis »", message)
+        self.assertIn("« Matthias »", message)
+        self.assertIn("t/add_players Alicia Matthis Matthias", message)
+        self.assertNotIn("t/add_player Alicia", message)
+        game.reset_cache()
+
+    def test_autoparse_reports_structure_error_before_unknown_names(self):
+        game.reset_cache()
+        session = game.create_session(504, source="auto")
+
+        with self.assertRaises(game.ParseError) as raised:
+            game.autoparse("Alicia garde 45 2 avec Matthis Bob Matthias", session)
+
+        self.assertIn("Il manque vs", str(raised.exception))
+        self.assertNotIn("Alicia", str(raised.exception))
+        game.reset_cache()
+
+    def test_autoparse_reports_missing_preneur(self):
+        game.reset_cache()
+        session = game.create_session(505, source="auto")
+
+        with self.assertRaises(game.ParseError) as raised:
+            game.autoparse("garde 45 2 vs Bob Carol", session)
+
+        self.assertIn("Il manque le preneur", str(raised.exception))
+        game.reset_cache()
+
+    def test_autoparse_reports_missing_score_before_unknown_names(self):
+        game.reset_cache()
+        session = game.create_session(506, source="auto")
+
+        with self.assertRaises(game.ParseError) as raised:
+            game.autoparse("Alice garde avec Matthis vs Bob Carol", session)
+
+        self.assertIn("Il manque le score", str(raised.exception))
+        self.assertNotIn("Matthis", str(raised.exception))
+        game.reset_cache()
+
+    def test_edit_missing_body_keeps_session_for_correction(self):
+        game.reset_cache()
+        save_history([{"message_id": 1557730091864301699, "type": "partie", "scores": {}}])
+        ctx = AsyncMock()
+        ctx.message.id = 507
+        ctx.message.reference = None
+        ctx.channel.id = 1
+        ctx.author.id = 42
+        reply = AsyncMock()
+        reply.id = 889
+        ctx.send = AsyncMock(return_value=reply)
+
+        asyncio.run(edit_command.callback(ctx, value="1557730091864301699"))
+
+        session = game.get_session(507)
+        self.assertIsNotNone(session)
+        self.assertEqual(session.confirm_message_id, 889)
+        action, _payload = handle_edit_message_edit(
+            507,
+            "t/edit 1557730091864301699 Alice garde 45 2 vs Bob Carol",
+            42,
+        )
+        self.assertEqual(action, "updated")
+        game.reset_cache()
+
+    def test_expiry_sends_new_message_when_original_is_inaccessible(self):
+        async def exercise():
+            game.reset_cache()
+            game.create_session(508, source="auto")
+            view = game.SessionExpiryView(508)
+            message = AsyncMock()
+            message.edit = AsyncMock(
+                side_effect=discord.HTTPException(
+                    SimpleNamespace(status=404, reason="Not Found"),
+                    "message was deleted",
+                )
+            )
+            game.bind_confirmation_message(view, message)
+
+            await view.on_timeout()
+
+            message.channel.send.assert_awaited_once_with(game.EXPIRED_MSG)
+            self.assertIsNone(game.get_session(508))
+
+        asyncio.run(exercise())
 
     def test_new_season_archives_legacy_backup_if_present(self):
         Path("players_backup.json").write_text("{}")
