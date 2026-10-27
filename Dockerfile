@@ -29,7 +29,7 @@ RUN case "$TARGETARCH" in \
     && chmod +x /supercronic
 
 # ---- Stage 3 : runtime python + venv ----
-FROM python:3.12-slim-bookworm
+FROM python:3.12-slim-bookworm AS bot
 
 # tzdata est requis pour que la variable TZ (posée par docker compose) soit
 # prise en compte par datetime.now() dans history.py / new_season.py.
@@ -45,6 +45,7 @@ WORKDIR /app
 COPY --from=builder /app/.venv /app/.venv
 COPY bot.py curves.py ./
 COPY tarot_commands ./tarot_commands
+COPY tarot_web ./tarot_web
 COPY --from=supercronic /supercronic /usr/local/bin/supercronic
 COPY backup/backup.sh backup/entrypoint.sh /usr/local/bin/
 COPY backup/crontab /etc/tarotbot/crontab
@@ -60,6 +61,21 @@ ENV PATH="/app/.venv/bin:$PATH" \
 WORKDIR /data
 RUN chown tarot:tarot /data
 USER tarot
-VOLUME ["/data"]
 
 ENTRYPOINT ["/usr/local/bin/entrypoint.sh"]
+
+# Runtime public minimal : pas d'outil restic/rclone, ni scripts de sauvegarde.
+FROM python:3.12-slim-bookworm AS web
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends ca-certificates \
+    && rm -rf /var/lib/apt/lists/* \
+    && useradd --create-home --uid 1000 tarot
+WORKDIR /app
+COPY --from=builder /app/.venv /app/.venv
+COPY tarot_commands ./tarot_commands
+COPY tarot_web ./tarot_web
+ENV PATH="/app/.venv/bin:$PATH" \
+    PYTHONPATH="/app" \
+    PYTHONUNBUFFERED=1
+USER tarot
+CMD ["python", "-m", "tarot_web"]

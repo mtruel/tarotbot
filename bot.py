@@ -25,6 +25,7 @@ from tarot_commands.game import (
 )
 from tarot_commands.help import error_message, explain_command_error, help, more_info
 from tarot_commands.history import history
+from tarot_commands.internal_api import start_api
 from tarot_commands.leaderboard import leaderboard, leaderboard2
 from tarot_commands.new_season import new_season
 from tarot_commands.ping import ping
@@ -86,6 +87,15 @@ bot.add_command(new_season)
 bot.add_command(export)
 bot.add_command(restore)
 bot.add_command(help)
+
+_api_runner = None
+
+
+@bot.event
+async def on_ready():
+    global _api_runner
+    if _api_runner is None:
+        _api_runner = await start_api(bot)
 
 
 @bot.event

@@ -1,6 +1,8 @@
 services:
   tarotbot:
-    build: .
+    build:
+      context: .
+      target: bot
     image: tarotbot
     container_name: tarotbot
     init: true
@@ -13,3 +15,43 @@ services:
     volumes:
       - ./data:/data
     user: "1000:1000"
+    networks:
+      - default
+      - tarot
+
+  tarot-web:
+    build:
+      context: .
+      target: web
+    image: tarotbot-web
+    container_name: tarot-web
+    init: true
+    restart: unless-stopped
+    depends_on:
+      - tarotbot
+    user: "1000:1000"
+    working_dir: /app
+    read_only: true
+    cap_drop: [ALL]
+    security_opt:
+      - no-new-privileges:true
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,size=16m
+    environment:
+      TZ: Europe/Paris
+      DISCORD_OAUTH_CLIENT_ID: ${DISCORD_OAUTH_CLIENT_ID:?Missing Discord OAuth client id}
+      DISCORD_OAUTH_CLIENT_SECRET: ${DISCORD_OAUTH_CLIENT_SECRET:?Missing Discord OAuth client secret}
+      DISCORD_OAUTH_REDIRECT_URI: ${DISCORD_OAUTH_REDIRECT_URI:?Missing Discord OAuth redirect uri}
+      DISCORD_GUILD_ID: ${DISCORD_GUILD_ID:?Missing Discord guild id}
+      WEB_SESSION_SECRET: ${WEB_SESSION_SECRET:?Missing web session secret}
+      TAROT_INTERNAL_TOKEN: ${TAROT_INTERNAL_TOKEN:?Missing internal token}
+    networks:
+      - tarot
+      - beta
+
+networks:
+  tarot:
+    internal: true
+  beta:
+    name: beta
+    external: true
