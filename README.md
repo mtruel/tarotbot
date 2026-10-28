@@ -99,7 +99,7 @@ docker compose -f docker-compose.debug.yml down
 - Console : `/debug/chat` (boutons, menus et confirmations comme sur Discord).
 - Accès LAN : `https://tarotbot-imb.beta.local.truel.fr` (route Caddy bêta, CA interne).
 - Garde-fous : refus si `DISCORD_TOKEN` est défini ou si le dossier de données contient des données sans marqueur `.debug`.
-- Développement : travailler dans un worktree dédié (`git worktree add ~/tarotbot-debug -b feature/...`) pour ne pas reconstruire la prod depuis une branche de feature.
+- Développement : travailler dans un worktree dédié (`git worktree add ~/tarotbot-debug -b feature/...`) pour ne pas reconstruire la prod depuis une branche de feature. Après le démarrage, lancer `docker compose -f docker-compose.debug.yml watch --no-up` dans un terminal pour recharger les modifications ; voir [le mode watch](docs/watch-debug.md).
 
 ### Exécution et données
 

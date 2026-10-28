@@ -16,8 +16,21 @@ services:
       TAROT_INTERNAL_TOKEN: ${TAROT_DEBUG_INTERNAL_TOKEN:-debug-internal-token-0000000000000000}
       TAROT_CHANNEL_ID: "1"
       TAROT_DEBUG_USER_NAME: ${TAROT_DEBUG_USER_NAME:-Debug User}
+      PYTHONDONTWRITEBYTECODE: "1"
     volumes:
       - ./data-debug:/data
+      - ./tarot_commands:/app/tarot_commands:ro
+      - ./tarot_debug:/app/tarot_debug:ro
+    develop:
+      watch:
+        - action: restart
+          path: ./tarot_commands
+          ignore: [__pycache__/, "*.pyc"]
+        - action: restart
+          path: ./tarot_debug
+          ignore: [__pycache__/, "*.pyc"]
+        - action: rebuild
+          path: ./debug_bot.py
     networks:
       - tarot-debug
 
@@ -49,6 +62,18 @@ services:
       WEB_SESSION_SECRET: ${TAROT_DEBUG_SESSION_SECRET:-debug-session-secret-0000000000000000}
       TAROT_DEBUG_USER_NAME: ${TAROT_DEBUG_USER_NAME:-Debug User}
       GIT_COMMIT: ${GIT_COMMIT:-unknown}
+      PYTHONDONTWRITEBYTECODE: "1"
+    volumes:
+      - ./tarot_commands:/app/tarot_commands:ro
+      - ./tarot_web:/app/tarot_web:ro
+    develop:
+      watch:
+        - action: restart
+          path: ./tarot_commands
+          ignore: [__pycache__/, "*.pyc"]
+        - action: restart
+          path: ./tarot_web
+          ignore: [static/, templates/, __pycache__/, "*.pyc"]
     networks:
       - tarot-debug
       - beta

@@ -300,8 +300,10 @@ class TestWebDebug(unittest.IsolatedAsyncioTestCase):
         response = await self.client.get("/", allow_redirects=False)
         self.assertEqual(response.status, 200)
         text = await response.text()
-        self.assertIn("MODE DEBUG", text)
+        self.assertIn('<details class="debug-banner">', text)
+        self.assertIn("<summary><strong>MODE DEBUG</strong></summary>", text)
         self.assertIn("Console de commandes", text)
+        self.assertIn('action="/debug/reset"', text)
         self.assertIn('name="robots" content="noindex"', text)
         self.assertIn("Alice", text)
 
