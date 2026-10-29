@@ -1,24 +1,34 @@
 <!doctype html>
-<html lang="fr">
+<html lang="fr" data-theme="light">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <meta name="robots" content="noindex">
   <title>Tarot · Console de commandes</title>
+  <link rel="icon" type="image/svg+xml" href="/static/favicon.svg">
   <link rel="stylesheet" href="/static/pico.min.css">
   <link rel="stylesheet" href="/static/site.css">
+  <link rel="stylesheet" href="/static/unified.css">
+  <link rel="stylesheet" href="/static/aux-theme.css">
+  <link rel="stylesheet" href="/static/header.css">
 </head>
-<body>
+<body class="site-theme aux-theme">
 {% if debug %}{% include "debug_banner.html" %}{% endif %}
-<main class="container">
-  <nav><strong>Tarot · Console de commandes</strong><ul><li><a href="/">Classement</a></li><li><a href="/game">Saisie web</a></li></ul></nav>
-  <p class="muted">Tape une commande comme sur Discord, par exemple <code>t/auto Alice garde 45 2 vs Bob Claire</code>. Les boutons et menus sont ceux du vrai bot.</p>
-  <div id="console-log" class="console-log" aria-live="polite"></div>
-  <form id="console-form" class="console-form">
-    <input type="hidden" name="csrf" value="{{ csrf }}">
-    <input id="console-input" name="text" type="text" autocomplete="off" placeholder="t/auto …" required>
-    <button type="submit">Envoyer</button>
-  </form>
+<main class="aux-page aux-page-with-header aux-console">
+  {% include "header.html" %}
+  <div class="site-intro aux-intro">
+    <p class="site-kicker aux-kicker">Tarot · Console de commandes</p>
+    <h1>Console de commandes</h1>
+  </div>
+  <section class="site-card aux-card aux-console-card">
+    <p class="muted">Tape une commande comme sur Discord, par exemple <code>t/auto Alice garde 45 2 vs Bob Claire</code>. Les boutons et menus sont ceux du vrai bot.</p>
+    <div id="console-log" class="console-log" aria-live="polite"></div>
+    <form id="console-form" class="console-form">
+      <input type="hidden" name="csrf" value="{{ csrf }}">
+      <input id="console-input" name="text" type="text" autocomplete="off" placeholder="t/auto …" required>
+      <button class="site-action aux-action" type="submit">Envoyer</button>
+    </form>
+  </section>
 </main>
 <script src="/static/console.js"></script>
 </body>

@@ -1,0 +1,31 @@
+      <div class="home-history">
+        {% for game in recent %}{% set entry = game.entry %}
+        {% if not loop.first and game.time.iso and loop.previtem.time.iso and game.time.date != loop.previtem.time.date %}<hr class="home-day-separator" aria-label="Changement de jour">{% endif %}
+        <article class="home-history-card" aria-label="Partie du {{ entry.time | default('date inconnue', true) }}">
+          <header class="home-history-header">
+            {% if game.time.iso %}<time class="home-history-time" datetime="{{ game.time.iso }}">
+              <span class="home-date">{{ game.time.date }}</span>
+              <span class="home-clock">{{ game.time.clock }}<span class="home-seconds">:{{ game.time.seconds }}</span></span>
+            </time>{% else %}<span class="home-date">{{ game.time.fallback }}</span>{% endif %}
+            {% if entry.type | default('partie') == 'descendante' %}<span class="home-game-type">Descendante</span>{% endif %}
+          </header>
+          <div class="home-game-details">
+            {% if entry.get('enchere') %}<span><strong>Contrat</strong> {{ entry.enchere }}</span>{% endif %}
+            {% if entry.get('points_attaque') is not none %}<span><strong>Attaque</strong> {{ entry.points_attaque }} points</span>{% endif %}
+            {% if entry.get('bouts') is not none %}<span><strong>Bouts</strong> {{ entry.bouts }}</span>{% endif %}
+            {% if entry.get('primes_attaque') %}<span><strong>Primes attaque</strong> {{ entry.primes_attaque | join(', ') }}</span>{% endif %}
+            {% if entry.get('primes_defense') %}<span><strong>Primes défense</strong> {{ entry.primes_defense | join(', ') }}</span>{% endif %}
+            {% if entry.get('miseres') %}<span><strong>Misères</strong> {{ entry.miseres | join(', ') }}</span>{% endif %}
+            {% if not (entry.get('enchere') or entry.get('points_attaque') is not none or entry.get('bouts') is not none or entry.get('primes_attaque') or entry.get('primes_defense') or entry.get('miseres')) %}<span>Détails non renseignés</span>{% endif %}
+          </div>
+          <div class="home-teams">
+            {% for group in game.groups %}<section class="home-team home-team-{{ group.team }}" aria-label="{{ {'attaque': 'Attaque', 'defense': 'Défense', 'inconnu': 'Équipe inconnue', 'joueurs': 'Joueurs'}[group.team] }}">
+              <h3 class="home-team-label">{{ {'attaque': 'Attaque', 'defense': 'Défense', 'inconnu': 'Équipe inconnue', 'joueurs': 'Joueurs'}[group.team] }}</h3>
+              <ul class="home-team-players">{% for player in group.players %}<li class="home-player">
+                <span class="home-player-identity"><span class="home-player-name">{{ player.name }}</span>{% if player.role %}<span class="home-player-role">{{ player.role }}</span>{% endif %}</span>
+                <span class="home-player-score">{% if player.score > 0 %}+{% endif %}{{ player.score }}</span>
+              </li>{% endfor %}</ul>
+            </section>{% endfor %}
+          </div>
+        </article>{% else %}<p class="home-history-empty">Aucune partie pour le moment.</p>{% endfor %}
+      </div>

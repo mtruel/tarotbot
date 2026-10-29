@@ -1,0 +1,46 @@
+<!doctype html>
+<html lang="fr" data-theme="light">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  {% if debug %}<meta name="robots" content="noindex">{% endif %}
+  <title>Tarot · Graphiques</title>
+  <link rel="icon" type="image/svg+xml" href="/static/favicon.svg">
+  <link rel="stylesheet" href="/static/pico.min.css">
+  <link rel="stylesheet" href="/static/site.css">
+  <link rel="stylesheet" href="/static/unified.css">
+  <link rel="stylesheet" href="/static/home-theme.css">
+  <link rel="stylesheet" href="/static/header.css">
+  <link rel="stylesheet" href="/static/graphs.css">
+  <script src="/static/echarts.min.js" defer></script>
+  <script src="/static/graphs.js" defer></script>
+</head>
+<body class="site-theme home-page">
+  {% if debug %}{% include "debug_banner.html" %}{% endif %}
+  <main class="home-shell">
+    {% include "header.html" %}
+    <div class="site-intro home-intro">
+      <div><p class="site-kicker home-kicker">LA SAISON EN COURS</p><h1>Les <em>graphiques.</em></h1><p class="home-account">{{ games }} partie{{ 's' if games != 1 else '' }}</p></div>
+    </div>
+    <section class="site-card home-card" aria-labelledby="graphs-heading">
+      <div class="home-card-heading"><div><p class="site-kicker home-kicker">LA SAISON EN COURBES</p><h2 id="graphs-heading">Points cumulés</h2></div><span class="home-suit" aria-hidden="true">♠</span></div>
+      {% if games and legend %}
+      <p class="graphs-description" id="graphs-description">Points cumulés après chaque partie. Touchez une courbe ou choisissez un joueur pour la mettre en valeur. La ligne horizontale foncée marque zéro.</p>
+      <div id="scores-chart" aria-labelledby="graphs-heading" aria-describedby="graphs-description graphs-scroll"></div>
+      <p class="home-scroll-hint graphs-scroll" id="graphs-scroll">Sur petit écran, faites défiler le graphique horizontalement pour voir les noms.</p>
+      <div id="scores-chart-players"></div>
+      <div id="scores-chart-fallback">
+        <p>Graphique statique : les interactions nécessitent JavaScript.</p>
+        <div class="chart home-chart" role="region" aria-labelledby="graphs-heading" tabindex="0">{{ chart | safe }}</div>
+        <h3 class="graphs-legend-heading">Joueurs <span>· points actuels</span></h3>
+        <ul class="graphs-legend">{% for player in legend %}<li>
+          <span class="graphs-player">{{ player.name }}</span>
+          <strong class="graphs-total">{% if player.total > 0 %}+{% endif %}{{ player.total }}</strong>
+        </li>{% endfor %}</ul>
+      </div>
+      <script type="application/json" id="scores-chart-data">{{ chart_data | tojson }}</script>
+      {% else %}<p class="graphs-empty">Aucune courbe à afficher pour le moment.</p>{% endif %}
+    </section>
+  </main>
+</body>
+</html>

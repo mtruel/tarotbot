@@ -5,6 +5,7 @@ import os
 import secrets
 import time
 from collections import deque
+from datetime import datetime
 from pathlib import Path
 from urllib.parse import urlencode
 from uuid import uuid4
@@ -12,7 +13,7 @@ from uuid import uuid4
 from aiohttp import ClientSession, ClientTimeout, web
 from jinja2 import Environment, FileSystemLoader, select_autoescape
 
-from tarot_commands.rules import PRIMES
+from tarot_commands.rules import CONTRAT_PAR_BOUT, PRIMES
 from tarot_commands.state import compute_scores, known_players
 from tarot_commands.web_game import InvalidGame, validate_game
 
@@ -21,6 +22,7 @@ COOKIE = "tarot_session"
 SESSION_KEY = web.RequestKey("session", dict)
 FORM_KEY = web.RequestKey("form", object)
 ROOT = Path(__file__).parent
+HISTORY_PAGE_SIZE = 20
 TEMPLATES = Environment(loader=FileSystemLoader(ROOT / "templates"), autoescape=select_autoescape())
 
 
@@ -43,6 +45,19 @@ def statistics(history, players):
     for name, total in totals.items():
         values = [g["scores"][name] for g in history if name in g["scores"]]
         count = len(values)
+        takes = attacks = defenses = unknown_roles = 0
+        for game in history:
+            if name not in game["scores"] or game.get("type") == "descendante":
+                continue
+            if name == game.get("preneur"):
+                takes += 1
+                attacks += 1
+            elif name == game.get("partenaire"):
+                attacks += 1
+            elif name in (game.get("defenseurs") or []):
+                defenses += 1
+            else:
+                unknown_roles += 1
         mean = total / count if count else 0
         variance = sum((x - mean) ** 2 for x in values) / (count - 1) if count > 1 else 0
         rows.append(
@@ -50,6 +65,10 @@ def statistics(history, players):
                 name=name,
                 points=int(total),
                 games=count,
+                takes=takes,
+                attacks=attacks,
+                defenses=defenses,
+                unknown_roles=unknown_roles,
                 mean=int(mean),
                 wins=sum(v >= 0 for v in values),
                 losses=sum(v < 0 for v in values),
@@ -59,11 +78,89 @@ def statistics(history, players):
     return sorted(rows, key=lambda p: p["points"], reverse=True)
 
 
-def chart_svg(history, players):
-    """Courbes cumulées, SVG autonome ; noms échappés par Jinja dans la légende HTML."""
+def history_time(value):
+    """Formate la date enregistrée sans supposer de fuseau, avec repli pour les formats anciens."""
+    try:
+        when = datetime.strptime(value, "%d/%m/%Y, %H:%M:%S")
+    except (TypeError, ValueError):
+        return {"fallback": str(value) if value else "—"}
+    months = (
+        "janvier",
+        "février",
+        "mars",
+        "avril",
+        "mai",
+        "juin",
+        "juillet",
+        "août",
+        "septembre",
+        "octobre",
+        "novembre",
+        "décembre",
+    )
+    return {
+        "iso": when.isoformat(),
+        "clock": when.strftime("%H:%M"),
+        "seconds": when.strftime("%S"),
+        "date": f"{when.day} {months[when.month - 1]} {when.year}",
+    }
+
+
+def history_entry(entry):
+    """Prépare les joueurs dans l'ordre des camps, sans inventer les rôles absents."""
+    scores = entry["scores"]
+    descendante = entry.get("type") == "descendante"
+    groups = []
+    seen = set()
+
+    def add_group(names, team, roles):
+        players = []
+        for name, role in zip(names, roles, strict=True):
+            if not isinstance(name, str) or name not in scores or name in seen:
+                continue
+            players.append({"name": name, "score": scores[name], "role": role})
+            seen.add(name)
+        if players:
+            groups.append({"team": team, "players": players})
+
+    if not descendante:
+        add_group(
+            [entry.get("preneur"), entry.get("partenaire")],
+            "attaque",
+            ["Preneur", "Partenaire"],
+        )
+        defenseurs = entry.get("defenseurs")
+        if isinstance(defenseurs, list):
+            add_group(defenseurs, "defense", [""] * len(defenseurs))
+    remaining = [name for name in scores if name not in seen]
+    add_group(remaining, "joueurs" if descendante else "inconnu", [""] * len(remaining))
+    return {"entry": entry, "groups": groups, "time": history_time(entry.get("time"))}
+
+
+def graph_data(history, players):
+    """Cumuls et dates dans l'ordre d'enregistrement, avec un point initial à zéro."""
+    players = list(players)
+    totals = dict.fromkeys(players, 0)
+    series = {name: [0] for name in players}
+    dates = [None]
+    for game in history:
+        for name in players:
+            totals[name] += game["scores"].get(name, 0)
+            series[name].append(totals[name])
+        date = game.get("time")
+        dates.append(date if isinstance(date, str) and date else None)
+    return {
+        "games": len(history),
+        "dates": dates,
+        "players": [{"name": name, "values": series[name]} for name in players],
+    }
+
+
+def chart_svg(history, players, limit=12):
+    """Courbes cumulées avec repères de points et de parties."""
     from xml.sax.saxutils import escape
 
-    players = list(players)[:12]
+    players = list(players)[:limit]
     totals = dict.fromkeys(players, 0)
     lines = {name: [0] for name in players}
     for game in history:
@@ -72,21 +169,40 @@ def chart_svg(history, players):
             lines[name].append(totals[name])
     values = [v for series in lines.values() for v in series] or [0]
     low, high = min(values), max(values)
-    span = max(high - low, 1)
+    if low == high:
+        low, high = low - 1, high + 1
+    span = high - low
     count = max(len(history), 1)
     elements = [
-        '<svg viewBox="0 0 800 240" role="img" aria-label="Évolution des points cumulés" xmlns="http://www.w3.org/2000/svg">'
+        '<svg viewBox="0 0 800 270" role="img" aria-label="Évolution des points cumulés par numéro de partie" xmlns="http://www.w3.org/2000/svg">'
     ]
-    elements.append('<line x1="30" y1="210" x2="790" y2="210" stroke="currentColor"/>')
+    for tick in range(5):
+        value = low + span * tick / 4
+        y = 225 - 200 * tick / 4
+        elements.append(
+            f'<line x1="75" y1="{y:.1f}" x2="785" y2="{y:.1f}" stroke="currentColor" opacity="0.12"/>'
+            f'<text x="66" y="{y + 4:.1f}" text-anchor="end" fill="currentColor" font-size="11">{value:.4g}</text>'
+        )
+    zero_y = 225 - 200 * (0 - low) / span
+    elements.append(
+        f'<line x1="75" y1="{zero_y:.1f}" x2="785" y2="{zero_y:.1f}" stroke="currentColor" opacity="0.45"/>'
+    )
+    for index in sorted({0, len(history) // 2, len(history)}):
+        x = 75 + 710 * index / count
+        elements.append(
+            f'<text x="{x:.1f}" y="245" text-anchor="middle" fill="currentColor" font-size="11">{index}</text>'
+        )
+    elements.append(
+        '<text x="785" y="263" text-anchor="end" fill="currentColor" font-size="11">Parties</text>'
+    )
     for index, (name, series) in enumerate(lines.items()):
         color = f"hsl({(index * 137) % 360} 65% 45%)"
-        elements.append(f"<title>{escape(name)}</title>")
         coordinates = " ".join(
-            f"{30 + 760 * i / count:.1f},{210 - 180 * (value - low) / span:.1f}"
+            f"{75 + 710 * i / count:.1f},{225 - 200 * (value - low) / span:.1f}"
             for i, value in enumerate(series)
         )
         elements.append(
-            f'<polyline fill="none" stroke="{color}" stroke-width="2" points="{coordinates}"/>'
+            f'<polyline fill="none" stroke="{color}" stroke-width="2" points="{coordinates}"><title>{escape(name)}</title></polyline>'
         )
     elements.append("</svg>")
     return "".join(elements)
@@ -199,27 +315,12 @@ async def create_app(*, http=None, config=None):
         except (OSError, TimeoutError) as exc:
             raise web.HTTPServiceUnavailable(text="Bot indisponible") from exc
 
-    debug_session = {
-        "access": "",
-        "user": {
-            "id": "1",
-            "name": os.environ.get("TAROT_DEBUG_USER_NAME", "Debug User"),
-        },
-        "csrf": secrets.token_urlsafe(32),
-        "expires": float("inf"),
-        "guild_checked": float("inf"),
-        "preview": None,
-        "commits": deque(),
-    }
-
     @web.middleware
     async def secure(request, handler):
         request[SESSION_KEY] = None
         if not debug and request.path.startswith("/debug/"):
             raise web.HTTPNotFound()
-        if debug:
-            request[SESSION_KEY] = debug_session
-        elif request.path not in (
+        if request.path not in (
             "/login",
             "/auth/discord",
             "/oauth/callback",
@@ -230,12 +331,14 @@ async def create_app(*, http=None, config=None):
                 sessions.pop(sid, None)
                 session = None
             if not session:
+                if debug and request.method == "POST" and request.path == "/debug/command":
+                    raise web.HTTPUnauthorized(text="Session debug expirée ou déconnectée")
                 if request.path != "/":
                     raise web.HTTPFound("/")
             else:
-                if not guild_id:
+                if not debug and not guild_id:
                     raise web.HTTPForbidden(text="Serveur Discord non configuré")
-                if session["guild_checked"] <= time.monotonic():
+                if not debug and session["guild_checked"] <= time.monotonic():
                     guilds = await discord_get("/users/@me/guilds", session["access"])
                     if guild_id not in {g["id"] for g in guilds}:
                         sessions.pop(sid, None)
@@ -266,18 +369,41 @@ async def create_app(*, http=None, config=None):
         return response
 
     async def login(_request):
-        if debug:
-            raise web.HTTPFound("/")
         return page("login.html")
 
-    async def start_discord_login(_request):
-        if debug:
-            raise web.HTTPFound("/")
-        nonce = secrets.token_urlsafe(32)
+    async def start_discord_login(request):
         now = time.monotonic()
         for sid, session in list(sessions.items()):
             if session["expires"] <= now:
                 sessions.pop(sid, None)
+        if debug:
+            sid = verify_cookie(request.cookies.get(COOKIE, ""))
+            if sid in sessions:
+                raise web.HTTPFound("/")
+            sid = secrets.token_urlsafe(32)
+            max_age = 43200
+            sessions[sid] = {
+                "access": "",
+                "user": {
+                    "id": "1",
+                    "name": os.environ.get("TAROT_DEBUG_USER_NAME", "Debug User"),
+                },
+                "csrf": secrets.token_urlsafe(32),
+                "expires": now + max_age,
+                "preview": None,
+                "commits": deque(),
+            }
+            response = web.HTTPFound("/")
+            response.set_cookie(
+                COOKIE,
+                signed_cookie(sid),
+                max_age=max_age,
+                httponly=True,
+                secure=True,
+                samesite="Lax",
+            )
+            raise response
+        nonce = secrets.token_urlsafe(32)
         for key, expiry in list(pending_login.items()):
             if expiry < now:
                 pending_login.pop(key, None)
@@ -353,7 +479,7 @@ async def create_app(*, http=None, config=None):
 
     async def home(request):
         if request[SESSION_KEY] is None:
-            return render("login.html")
+            return page("login.html") if debug else render("login.html")
         snapshot = await state()
         history = snapshot["history"]
         players = snapshot["players"]
@@ -361,15 +487,53 @@ async def create_app(*, http=None, config=None):
         return page(
             "home.html",
             rows=statistics(history, players),
-            recent=list(reversed(history[-10:])),
+            recent=[history_entry(game) for game in reversed(history[-10:])],
             chart=chart_svg(history, names),
             user=request[SESSION_KEY]["user"],
             csrf=request[SESSION_KEY]["csrf"],
         )
 
+    async def graphs_page(request):
+        snapshot = await state()
+        history = snapshot["history"]
+        names = known_players(history, snapshot["players"])
+        totals = compute_scores(history, snapshot["players"])
+        return page(
+            "graphs.html",
+            chart=chart_svg(history, names, limit=None),
+            chart_data=graph_data(history, names),
+            legend=[{"name": name, "total": totals[name]} for name in names],
+            games=len(history),
+            user=request[SESSION_KEY]["user"],
+            csrf=request[SESSION_KEY]["csrf"],
+        )
+
+    async def history_page(request):
+        raw_page = request.query.get("page", "1")
+        if not raw_page.isascii() or not raw_page.isdecimal() or len(raw_page) > 9:
+            raise web.HTTPBadRequest(text="Numéro de page invalide")
+        number = int(raw_page)
+        if number < 1:
+            raise web.HTTPBadRequest(text="Numéro de page invalide")
+        snapshot = await state()
+        history = snapshot["history"]
+        total = len(history)
+        pages = max(1, (total + HISTORY_PAGE_SIZE - 1) // HISTORY_PAGE_SIZE)
+        if number > pages:
+            raise web.HTTPNotFound(text="Page d’historique introuvable")
+        end = total - (number - 1) * HISTORY_PAGE_SIZE
+        start = max(0, end - HISTORY_PAGE_SIZE)
+        return page(
+            "history.html",
+            recent=[history_entry(game) for game in reversed(history[start:end])],
+            number=number,
+            pages=pages,
+            total=total,
+            user=request[SESSION_KEY]["user"],
+            csrf=request[SESSION_KEY]["csrf"],
+        )
+
     async def logout(request):
-        if debug:
-            raise web.HTTPFound("/")
         sid = verify_cookie(request.cookies.get(COOKIE, ""))
         sessions.pop(sid, None)
         result = web.HTTPFound("/login")
@@ -381,6 +545,8 @@ async def create_app(*, http=None, config=None):
             "game.html",
             players=names,
             primes=list(PRIMES),
+            targets=CONTRAT_PAR_BOUT,
+            user=request[SESSION_KEY]["user"],
             csrf=request[SESSION_KEY]["csrf"],
             selected_players=form.getall("joueurs", []) if form else [],
             selected_miseres=form.getall("miseres", []) if form else [],
@@ -400,20 +566,54 @@ async def create_app(*, http=None, config=None):
     async def game(request):
         snapshot = await state()
         names = known_players(snapshot["history"], snapshot["players"])
-        return game_page(request, names)
+        error = "Cet aperçu a expiré. Recalcule les scores." if request.query.get("expired") else ""
+        return game_page(request, names, error=error)
+
+    async def game2(request):
+        return web.Response(status=302, headers={"Location": "/game"})
+
+    def redirect_to_preview(request, names, *, error="", scores=None, commit_id=""):
+        page_id = commit_id or str(uuid4())
+        request[SESSION_KEY]["preview_page"] = {
+            "id": page_id,
+            "names": names,
+            "form": request[FORM_KEY].copy(),
+            "error": error,
+            "scores": scores,
+            "commit_id": commit_id,
+        }
+        return web.Response(status=303, headers={"Location": f"/game/preview/{page_id}#preview"})
 
     async def preview(request):
         request[SESSION_KEY]["preview"] = None
+        request[SESSION_KEY].pop("preview_page", None)
         snapshot = await state()
         names = known_players(snapshot["history"], snapshot["players"])
         try:
             game_data = parse_form(request[FORM_KEY])
             _session, scores = validate_game(game_data, names)
         except InvalidGame as exc:
-            return game_page(request, names, request[FORM_KEY], error=str(exc))
+            return redirect_to_preview(request, names, error=str(exc))
         commit_id = str(uuid4())
         request[SESSION_KEY]["preview"] = (commit_id, game_data)
-        return game_page(request, names, request[FORM_KEY], scores=scores, commit_id=commit_id)
+        return redirect_to_preview(request, names, scores=scores, commit_id=commit_id)
+
+    async def game_preview(request):
+        session = request[SESSION_KEY]
+        saved = session.get("preview_page")
+        if not saved or saved["id"] != request.match_info["page_id"]:
+            return web.Response(status=302, headers={"Location": "/game?expired=1#preview"})
+        previewed = session["preview"]
+        if saved["scores"] is not None and (not previewed or saved["commit_id"] != previewed[0]):
+            return web.Response(status=302, headers={"Location": "/game?expired=1#preview"})
+        return game_page(
+            request,
+            saved["names"],
+            saved["form"],
+            error=saved["error"],
+            scores=saved["scores"],
+            commit_id=saved["commit_id"],
+        )
 
     async def commit(request):
         session = request[SESSION_KEY]
@@ -450,12 +650,17 @@ async def create_app(*, http=None, config=None):
             raise web.HTTPServiceUnavailable(
                 text="Bot indisponible, réessaie avec la même confirmation"
             ) from exc
-        session["preview"] = None
+        if session["preview"] is previewed:
+            session["preview"] = None
+        saved_page = session.get("preview_page")
+        if saved_page and saved_page["id"] == previewed[0]:
+            session.pop("preview_page", None)
         recent.append(now)
         return page(
             "saved.html",
             message_id=result["message_id"],
             table_sent=result.get("table_sent", True),
+            user=request[SESSION_KEY]["user"],
             csrf=request[SESSION_KEY]["csrf"],
         )
 
@@ -499,9 +704,13 @@ async def create_app(*, http=None, config=None):
     app.router.add_get("/auth/discord", start_discord_login)
     app.router.add_get("/oauth/callback", callback)
     app.router.add_get("/", home)
+    app.router.add_get("/history", history_page)
+    app.router.add_get("/graphs", graphs_page)
     app.router.add_post("/logout", logout)
     app.router.add_get("/game", game)
     app.router.add_post("/preview", preview)
+    app.router.add_get("/game2", game2)
+    app.router.add_get("/game/preview/{page_id}", game_preview)
     app.router.add_post("/commit", commit)
     app.router.add_get("/debug/chat", debug_console)
     app.router.add_post("/debug/command", debug_command)

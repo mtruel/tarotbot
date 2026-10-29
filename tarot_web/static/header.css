@@ -1,0 +1,153 @@
+.app-header {
+  display: grid;
+  grid-template-columns: auto 1fr auto auto;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+  min-height: 83px;
+  padding: 8px 0;
+  border-bottom: 1px solid #dedfd6;
+  color: #242e2b;
+  font: 15px/1.5 system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+}
+
+.app-header *, .app-header *::before, .app-header *::after { box-sizing: border-box; }
+.app-header .app-header-brand {
+  display: inline-flex;
+  align-items: center;
+  min-height: 44px;
+  color: #242e2b;
+  font-size: 13px;
+  font-weight: 800;
+  letter-spacing: .1em;
+  text-decoration: none;
+  white-space: nowrap;
+}
+
+.app-header .app-header-nav {
+  display: flex;
+  justify-content: flex-start;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+}
+.app-header .app-header-nav a {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 44px;
+  margin: 0;
+  padding: 8px;
+  color: #234b3f;
+  font-size: 13px;
+  font-weight: 650;
+  line-height: 1.25;
+  text-align: center;
+  text-decoration: none;
+}
+.app-header .app-header-nav a:hover { text-decoration: underline; }
+
+.app-header .app-header-action {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 44px;
+  margin: 0;
+  padding: 8px 14px;
+  border: 1px solid #234b3f;
+  border-radius: 9px;
+  background: #234b3f;
+  color: #fff;
+  font-size: 13px;
+  font-weight: 700;
+  line-height: 1.25;
+  text-align: center;
+  text-decoration: none;
+}
+.app-header .app-header-action:hover { border-color: #183b31; background: #183b31; color: #fff; }
+
+.app-header .app-header-account { position: relative; grid-column: 4; min-width: 0; margin: 0; }
+.app-header .app-header-account > summary:not([role]),
+.app-header .app-header-account[open] > summary:not([role]):not(:focus) {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 44px;
+  margin: 0;
+  padding: 8px;
+  color: #234b3f;
+  font-size: 13px;
+  font-weight: 700;
+  line-height: 1.25;
+  list-style: none;
+  cursor: pointer;
+}
+.app-header .app-header-account > summary::-webkit-details-marker { display: none; }
+.app-header .app-header-account > summary:not([role])::after {
+  display: inline-block;
+  float: none;
+  width: auto;
+  height: auto;
+  margin: 0;
+  background: none;
+  content: '▾';
+  transform: none;
+}
+.app-header .app-header-account[open] > summary:not([role])::after { content: '▴'; transform: none; }
+.app-header .app-header-account-panel {
+  position: absolute;
+  z-index: 2;
+  top: 100%;
+  right: 0;
+  width: min(18rem, calc(100vw - 32px));
+  padding: 12px;
+  border: 1px solid #e7e9e3;
+  border-radius: 9px;
+  background: #fff;
+  box-shadow: 0 8px 24px rgba(39, 54, 43, .14);
+}
+.app-header .app-header-user { margin: 0 0 10px; color: #242e2b; font-size: 13px; overflow-wrap: anywhere; }
+.app-header .app-header-account form { margin: 0; }
+.app-header .app-header-account form button {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  min-height: 44px;
+  margin: 0;
+  padding: 8px 12px;
+  border: 1px solid #cbd8cd;
+  border-radius: 9px;
+  background: #fff;
+  box-shadow: none;
+  color: #234b3f;
+  font: 700 13px/1.25 system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  cursor: pointer;
+}
+.app-header .app-header-account form button:hover { border-color: #234b3f; background: #e9efe8; color: #234b3f; }
+.app-header :is(a, summary, button):focus-visible { outline: 3px solid #bc8a53; outline-offset: 2px; }
+
+@media (max-width: 720px) {
+  .app-header {
+    grid-template-columns: auto minmax(0, 1fr) auto;
+    gap: 0 6px;
+    min-height: 0;
+    padding: 6px 0;
+  }
+  .app-header .app-header-brand { font-size: 12px; letter-spacing: .06em; }
+  .app-header .app-header-action { grid-column: 2; grid-row: 1; justify-self: end; padding: 8px; font-size: 12px; }
+  .app-header .app-header-account { grid-column: 3; grid-row: 1; }
+  .app-header .app-header-account > summary:not([role]),
+  .app-header .app-header-account[open] > summary:not([role]):not(:focus) { gap: 4px; padding: 8px 4px; font-size: 12px; }
+  .app-header .app-header-nav {
+    grid-column: 1 / -1;
+    grid-row: 2;
+    display: flex;
+    justify-content: flex-start;
+    gap: 0;
+    width: 100%;
+  }
+  .app-header .app-header-nav a { min-width: 0; padding: 8px 2px; font-size: 12px; overflow-wrap: anywhere; }
+}

@@ -24,9 +24,29 @@ PLAYERS = [
     "Hugo",
     "Inès",
     "Jules",
+    "Karim",
+    "Leïla",
+    "Léa",
+    "Léo",
+    "Lucie",
+    "Lucas",
+    "Maël",
+    "Manon",
+    "Mehdi",
+    "Mia",
+    "Noé",
+    "Nora",
+    "Olivier",
+    "Pauline-Marguerite",
+    "Quentin-Emmanuel",
+    "Romain-Alexandre",
+    "Sarah-Éléonore",
+    "Théo-Maximilien",
+    "Victor",
+    "Yasmine",
 ]
-ACTIVE_PLAYERS = PLAYERS[:-2]
-IDLE_PLAYERS = PLAYERS[-2:]
+ACTIVE_PLAYERS = PLAYERS[:8]
+IDLE_PLAYERS = PLAYERS[8:]
 ENCHERES = [1, 2, 4, 6]
 POIGNEES = ["Simple Poignée", "Double Poignée", "Triple Poignée"]
 CHELEMS = ["Chelem annoncé", "Chelem non annoncé", "Chelem chuté"]

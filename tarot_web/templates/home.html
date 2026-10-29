@@ -1,7 +1,84 @@
 <!doctype html>
-<html lang="fr"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">{% if debug %}<meta name="robots" content="noindex">{% endif %}<title>Tarot · Classement</title><link rel="stylesheet" href="/static/pico.min.css"><link rel="stylesheet" href="/static/site.css"></head>
-<body>{% if debug %}{% include "debug_banner.html" %}{% endif %}<main class="container"><nav><strong>Tarot · Classement</strong><ul><li><a href="/game">Saisir une partie</a></li></ul></nav>
-<p>Connecté : {{ user.name }}</p><form method="post" action="/logout"><input type="hidden" name="csrf" value="{{ csrf }}"><button class="secondary" type="submit">Déconnexion</button></form>
-<section><h1>Points cumulés</h1><div class="chart">{{ chart | safe }}</div><p class="muted">Courbes : 12 premiers joueurs de la liste, parties de la saison en cours.</p></section>
-<section><h2>Classement</h2><div class="scroll"><table><thead><tr><th>Joueur</th><th>Points</th><th>Parties</th><th>Points / partie</th><th>V/D</th><th>Écart-type</th></tr></thead><tbody>{% for row in rows %}<tr><th>{{ row.name }}</th><td>{{ row.points }}</td><td>{{ row.games }}</td><td>{{ row.mean }}</td><td>{{ row.wins }}/{{ row.losses }}</td><td>{{ row.deviation }}</td></tr>{% endfor %}</tbody></table></div></section>
-<section><h2>Dernières parties</h2><div class="scroll"><table><thead><tr><th>Date</th><th>Type</th><th>Joueurs et scores</th></tr></thead><tbody>{% for entry in recent %}<tr><td>{{ entry.time }}</td><td>{{ entry.type | default('partie') }}</td><td>{% for name, value in entry.scores.items() %}{{ name }} : {{ value }}{% if not loop.last %}, {% endif %}{% endfor %}</td></tr>{% endfor %}</tbody></table></div></section></main></body></html>
+<html lang="fr" data-theme="light">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  {% if debug %}<meta name="robots" content="noindex">{% endif %}
+  <title>Tarot · Classement</title>
+  <link rel="icon" type="image/svg+xml" href="/static/favicon.svg">
+  <link rel="stylesheet" href="/static/pico.min.css">
+  <link rel="stylesheet" href="/static/site.css">
+  <link rel="stylesheet" href="/static/unified.css">
+  <link rel="stylesheet" href="/static/home-theme.css">
+  <link rel="stylesheet" href="/static/header.css">
+  <script src="/static/home.js" defer></script>
+</head>
+<body class="site-theme home-page">
+  {% if debug %}{% include "debug_banner.html" %}{% endif %}
+  <main class="home-shell">
+    {% include "header.html" %}
+
+    <div class="site-intro home-intro">
+      <div>
+        <p class="site-kicker home-kicker">LA SAISON EN COURS</p>
+        <h1>Le <em>classement.</em></h1>
+      </div>
+    </div>
+
+    <section class="site-card home-card" aria-labelledby="ranking-heading">
+      <div class="home-card-heading">
+        <div><p class="site-kicker home-kicker">LES JOUEURS</p><h2 id="ranking-heading">Classement</h2></div>
+        <span class="home-suit" aria-hidden="true">♦</span>
+      </div>
+      <p class="home-scroll-hint" id="ranking-hint">Faites défiler le tableau horizontalement pour voir toutes les colonnes.</p>
+      <div class="scroll home-table-scroll" role="region" aria-labelledby="ranking-heading" aria-describedby="ranking-hint ranking-note" tabindex="0">
+        <table class="home-table home-ranking" id="ranking-table">
+          <thead><tr>
+            <th scope="col" aria-sort="none"><button type="button" data-sort="number" disabled>Rang</button></th>
+            <th scope="col" aria-sort="none"><button type="button" data-sort="name" disabled>Joueur</button></th>
+            <th scope="col" aria-sort="none"><button type="button" data-sort="number" disabled>Points</button></th>
+            <th scope="col" aria-sort="none"><button type="button" data-sort="number" disabled>Parties</button></th>
+            <th scope="col" aria-sort="none"><button type="button" data-sort="number" disabled>Prises / parties</button></th>
+            <th scope="col" aria-sort="none"><button type="button" data-sort="number" disabled>Attaque</button></th>
+            <th scope="col" aria-sort="none"><button type="button" data-sort="number" disabled>Défense</button></th>
+            <th scope="col" aria-sort="none"><button type="button" data-sort="number" disabled>Points / partie</button></th>
+            <th scope="col" aria-sort="none"><button type="button" data-sort="number" disabled>V/D</button></th>
+            <th scope="col" aria-sort="none"><button type="button" data-sort="number" disabled>Écart-type</button></th>
+          </tr></thead>
+          <tbody>{% for row in rows %}<tr>
+            <td class="home-rank" data-value="{{ loop.index }}">{{ loop.index }}</td>
+            <th scope="row" data-value="{{ row.name }}">{{ row.name }}{% if row.unknown_roles %}<span class="home-unknown" title="{{ row.unknown_roles }} participation(s) sans rôle connu" aria-label="{{ row.unknown_roles }} participation(s) sans rôle connu">*</span>{% endif %}</th>
+            <td data-value="{{ row.points }}">{{ row.points }}</td>
+            <td data-value="{{ row.games }}">{{ row.games }}</td>
+            <td data-value="{{ row.takes / row.games if row.games else 0 }}">{{ row.takes }}/{{ row.games }}</td>
+            <td data-value="{{ row.attacks }}">{{ row.attacks }}</td>
+            <td data-value="{{ row.defenses }}">{{ row.defenses }}</td>
+            <td data-value="{{ row.mean }}">{{ row.mean }}</td>
+            <td data-value="{{ row.wins / row.games if row.games else 0 }}">{{ row.wins }}/{{ row.losses }}</td>
+            <td data-value="{{ row.deviation }}">{{ row.deviation }}</td>
+          </tr>{% endfor %}</tbody>
+        </table>
+      </div>
+      <p class="home-note" id="ranking-note">Prises / parties : nombre de fois preneur sur l’ensemble des parties. L’attaque comprend le preneur et son partenaire ; les descendantes n’ont pas de camp.{% if rows | selectattr('unknown_roles') | list %} * Rôle non renseigné pour certaines parties : les décomptes par rôle peuvent être incomplets.{% endif %}</p>
+    </section>
+
+    <section class="site-card home-card" aria-labelledby="recent-heading">
+      <div class="home-card-heading">
+        <div><p class="site-kicker home-kicker">L’HISTORIQUE</p><h2 id="recent-heading">Dernières parties</h2></div>
+        <span class="home-suit" aria-hidden="true">♣</span>
+      </div>
+      {% include "history_cards.html" %}
+      <a class="home-history-link" href="/history">Voir tout l’historique <span aria-hidden="true">→</span></a>
+    </section>
+
+    <section class="site-card home-card" aria-labelledby="chart-heading">
+      <div class="home-card-heading">
+        <div><p class="site-kicker home-kicker">LA SAISON EN COURBES</p><h2 id="chart-heading">Points cumulés</h2></div>
+        <span class="home-suit" aria-hidden="true">♠</span>
+      </div>
+      <div class="chart home-chart" role="region" aria-label="Graphique des points cumulés, défilement horizontal" tabindex="0">{{ chart | safe }}</div>
+      <p class="home-note">Courbes : 12 premiers joueurs de la liste, parties de la saison en cours.</p>
+    </section>
+  </main>
+</body>
+</html>

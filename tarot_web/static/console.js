@@ -63,6 +63,10 @@ async function post(payload) {
     headers: { "Content-Type": "application/json", "X-CSRF-Token": csrf },
     body: JSON.stringify(payload),
   });
+  if (response.status === 401) {
+    addMessage("system", "Session debug expirée ou déconnectée. Recharge la page pour te reconnecter.");
+    return;
+  }
   if (!response.ok) {
     addMessage("system", "Erreur " + response.status + " : " + (await response.text()));
     return;

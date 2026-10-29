@@ -1,0 +1,35 @@
+<!doctype html>
+<html lang="fr" data-theme="light">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  {% if debug %}<meta name="robots" content="noindex">{% endif %}
+  <title>Tarot · Historique</title>
+  <link rel="icon" type="image/svg+xml" href="/static/favicon.svg">
+  <link rel="stylesheet" href="/static/pico.min.css">
+  <link rel="stylesheet" href="/static/site.css">
+  <link rel="stylesheet" href="/static/unified.css">
+  <link rel="stylesheet" href="/static/home-theme.css">
+  <link rel="stylesheet" href="/static/header.css">
+  <script src="/static/history.js" defer></script>
+</head>
+<body class="site-theme home-page">
+  {% if debug %}{% include "debug_banner.html" %}{% endif %}
+  <main class="home-shell">
+    {% include "header.html" %}
+    <div class="site-intro home-intro">
+      <div><p class="site-kicker home-kicker">LA SAISON EN COURS</p><h1>L’<em>historique.</em></h1><p class="home-account">{{ total }} partie{{ 's' if total != 1 else '' }}</p></div>
+    </div>
+    <section class="site-card home-card" aria-labelledby="history-heading">
+      <div class="home-card-heading"><div><p class="site-kicker home-kicker">LA SAISON</p><h2 id="history-heading">Toutes les parties</h2></div><span class="home-suit" aria-hidden="true">♣</span></div>
+      {% include "history_cards.html" %}
+      {% if pages > 1 %}<nav class="home-pagination" aria-label="Pages de l’historique">
+        {% if number > 1 %}<a href="/history?page={{ number - 1 }}" rel="prev">← Plus récentes</a>{% endif %}
+        <span>Page {{ number }} / {{ pages }}</span>
+        {% if number < pages %}<a href="/history?page={{ number + 1 }}" rel="next">Plus anciennes →</a>{% endif %}
+      </nav>
+      <p class="home-history-status" role="status" aria-live="polite"></p>{% endif %}
+    </section>
+  </main>
+</body>
+</html>

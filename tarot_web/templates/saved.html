@@ -1,1 +1,30 @@
-<!doctype html><html lang="fr"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">{% if debug %}<meta name="robots" content="noindex">{% endif %}<title>Tarot · Enregistré</title><link rel="stylesheet" href="/static/pico.min.css"><link rel="stylesheet" href="/static/site.css"></head><body>{% if debug %}{% include "debug_banner.html" %}{% endif %}<main class="container"><h1>Partie enregistrée</h1><p>Identifiant Discord : {{ message_id }}</p>{% if not table_sent %}<p>Le tableau n'a pas pu être publié ; l'annonce est disponible sur Discord.</p>{% endif %}<a href="/">Voir le classement</a></main></body></html>
+<!doctype html>
+<html lang="fr" data-theme="light">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  {% if debug %}<meta name="robots" content="noindex">{% endif %}
+  <title>Tarot · Enregistré</title>
+  <link rel="icon" type="image/svg+xml" href="/static/favicon.svg">
+  <link rel="stylesheet" href="/static/pico.min.css">
+  <link rel="stylesheet" href="/static/site.css">
+  <link rel="stylesheet" href="/static/unified.css">
+  <link rel="stylesheet" href="/static/aux-theme.css">
+  <link rel="stylesheet" href="/static/header.css">
+</head>
+<body class="site-theme aux-theme">
+{% if debug %}{% include "debug_banner.html" %}{% endif %}
+<main class="aux-page aux-page-with-header">
+  {% include "header.html" %}
+  <div class="site-intro aux-intro">
+    <p class="site-kicker aux-kicker">Tarot · Classement</p>
+    <h1>Partie enregistrée</h1>
+  </div>
+  <section class="site-card aux-card aux-saved">
+    {% if message_id is defined and message_id is not none %}<p>Identifiant Discord : {{ message_id }}</p>{% endif %}
+    {% if not table_sent %}<p>Le tableau n'a pas pu être publié ; l'annonce est disponible sur Discord.</p>{% endif %}
+    <a class="site-action aux-action" href="/">Voir le classement</a>
+  </section>
+</main>
+</body>
+</html>

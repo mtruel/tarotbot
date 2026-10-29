@@ -4,91 +4,96 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
   {% if debug %}<meta name="robots" content="noindex">{% endif %}
-  <title>Tarot · Nouvelle partie</title>
-  <link rel="stylesheet" href="/static/pico.min.css">
-  <link rel="stylesheet" href="/static/site.css">
+  <title>Nouvelle partie · Tarot</title>
+  <link rel="icon" type="image/svg+xml" href="/static/favicon.svg">
+  <link rel="stylesheet" href="/static/game.css">
+  <link rel="stylesheet" href="/static/header.css">
   <script src="/static/game.js" defer></script>
 </head>
 <body>
 {% if debug %}{% include "debug_banner.html" %}{% endif %}
-<main class="container game-page">
-  <nav aria-label="Navigation"><strong>Nouvelle partie</strong><ul><li><a href="/">Classement</a></li></ul></nav>
-  <h1>Saisir une partie</h1>
-  <p class="muted">Renseigne le résultat, vérifie les scores, puis confirme la publication sur Discord.</p>
+<main class="page">
+  {% set hide_game_action = true %}{% include "header.html" %}
+
+  <div class="intro"><h1>Nouvelle <em>partie.</em></h1></div>
+
   <form id="game-form" method="post" action="/preview#preview">
     <input type="hidden" name="csrf" value="{{ csrf }}">
-    <section class="game-step" aria-labelledby="players-heading">
-      <h2 id="players-heading">1. Joueurs</h2>
-      <p id="player-help">Choisis 3 à 5 joueurs présents à la table. <span id="player-count" aria-live="polite"></span></p>
-      <label for="player-search" id="player-search-label" hidden>Rechercher un joueur
-        <input id="player-search" type="search" placeholder="Nom du joueur…" autocomplete="off" aria-controls="player-choices">
-      </label>
-      <div id="player-choices" class="choice-grid" role="group" aria-describedby="player-help">
-        {% for player in players %}<label class="choice"><input type="checkbox" name="joueurs" value="{{ player }}" {% if player in selected_players %}checked{% endif %}><span>{{ player }}</span></label>{% endfor %}
-      </div>
-      <p id="player-no-results" class="muted" hidden>Aucun joueur trouvé.</p>
-    </section>
-    <section class="game-step" aria-labelledby="roles-heading">
-      <h2 id="roles-heading">2. Rôles</h2>
-      <div id="native-roles" class="form-grid">
-        <label for="preneur">Preneur
-          <select id="preneur" name="preneur" required><option value="">Choisir un joueur…</option>{% for player in selected_players %}<option value="{{ player }}" {% if player == preneur %}selected{% endif %}>{{ player }}</option>{% endfor %}</select>
-        </label>
-        <label for="partenaire" id="partner-field">Partenaire <small>(uniquement à 5)</small>
-          <select id="partenaire" name="partenaire"><option value="">Aucun · joue seul</option>{% for player in selected_players %}<option value="{{ player }}" {% if player == partenaire %}selected{% endif %}>{{ player }}</option>{% endfor %}</select>
-        </label>
-      </div>
-      <div id="touch-roles" class="role-pickers" hidden>
-        <details id="taker-picker" class="role-picker">
-          <summary><span>Preneur</span><strong id="taker-summary">Choisir un joueur…</strong></summary>
-          <div id="taker-choices" class="choice-grid" role="radiogroup" aria-label="Preneur"></div>
-        </details>
-        <details id="partner-picker" class="role-picker" hidden>
-          <summary><span>Partenaire <small>(à 5 uniquement)</small></span><strong id="partner-summary">Joue seul</strong></summary>
-          <div id="partner-choices" class="choice-grid" role="radiogroup" aria-label="Partenaire"></div>
-        </details>
-      </div>
-      <p class="muted" id="defenders" aria-live="polite">Les autres joueurs sélectionnés seront défenseurs.</p>
-    </section>
-    <section class="game-step" aria-labelledby="result-heading">
-      <h2 id="result-heading">3. Résultat</h2>
-      <fieldset><legend>Contrat</legend>
-        <div class="choice-grid result-choices" role="group" aria-label="Contrat">
-          {% for value, label in [(1, 'Petite · ×1'), (2, 'Garde · ×2'), (4, 'Garde Sans · ×4'), (6, 'Garde Contre · ×6')] %}<label class="choice"><input type="radio" name="enchere" value="{{ value }}" {% if enchere == value|string %}checked{% endif %} required><span>{{ label }}</span></label>{% endfor %}
+
+    <section class="panel" aria-labelledby="players-heading">
+      <details id="players-picker" class="players-picker" open>
+      <summary class="section-heading"><span class="step-number">01</span><div class="players-title"><span id="player-count" class="section-kicker" aria-live="polite">{% if selected_players %}{{ selected_players | length }} JOUEUR{% if selected_players | length > 1 %}S{% endif %}{% else %}3 À 5 JOUEURS{% endif %}</span><h2 id="players-heading">Qui joue ?</h2></div><span id="players-summary" class="players-summary" aria-live="polite">{{ selected_players | join(", ") or "Aucun joueur sélectionné" }}</span><span class="section-icon players-suit" aria-hidden="true">♠</span><span id="players-done" class="players-done" hidden>Valider</span><span class="players-edit">Modifier</span></summary>
+      <div class="section-body">
+        <div class="hint-row"><p>Choisis de 3 à 5 joueurs.</p></div><p id="player-error" class="error" role="alert" hidden>Choisis entre 3 et 5 joueurs.</p>
+        <label class="search-label" for="player-search" hidden>Rechercher un joueur</label>
+        <input class="search" id="player-search" type="search" hidden placeholder="Rechercher un joueur…" autocomplete="off" aria-controls="player-choices">
+        <div id="player-choices" class="player-grid">
+          {% for player in players %}<label class="player-choice"><input type="checkbox" name="joueurs" value="{{ player }}" {% if player in selected_players %}checked{% endif %}><span><i aria-hidden="true">{{ player[:1] | upper }}</i><b>{{ player }}</b><small aria-hidden="true">✓</small></span></label>{% endfor %}
         </div>
-      </fieldset>
-      <fieldset><legend>Bouts <small>(du preneur)</small></legend>
-        <div class="choice-grid bout-choices" role="group" aria-label="Bouts du preneur">
-          {% for value in range(4) %}<label class="choice"><input type="radio" name="bouts" value="{{ value }}" {% if bouts == value|string %}checked{% endif %} required><span>{{ value }}</span></label>{% endfor %}
-        </div>
-      </fieldset>
-      <label for="points_attaque">Points d’attaque <small>(sur 91)</small>
-        <input id="points_attaque" type="number" name="points_attaque" min="0" max="91" step="1" inputmode="numeric" placeholder="Ex. 54" value="{{ points_attaque }}" required>
-      </label>
+        <p id="no-results" class="empty" hidden>Aucun joueur trouvé.</p>
+      </div>
+      </details>
     </section>
-    <details class="game-step" {% if selected_miseres or selected_primes_attaque or selected_primes_defense %}open{% endif %}>
-      <summary><strong>Primes et misères</strong> <small>· facultatif</small></summary>
-      <fieldset><legend>Primes de l’attaque</legend><div class="choice-grid">{% for prime in primes %}<label class="choice"><input type="checkbox" name="primes_attaque" value="{{ prime }}" {% if prime in selected_primes_attaque %}checked{% endif %}><span>{{ prime }}</span></label>{% endfor %}</div></fieldset>
-      <fieldset><legend>Primes de la défense</legend><div class="choice-grid">{% for prime in primes %}<label class="choice"><input type="checkbox" name="primes_defense" value="{{ prime }}" {% if prime in selected_primes_defense %}checked{% endif %}><span>{{ prime }}</span></label>{% endfor %}</div></fieldset>
-      <fieldset><legend>Misères <small>(joueurs présents uniquement)</small></legend><div class="choice-grid">{% for player in selected_players %}<label class="choice"><input type="checkbox" name="miseres" value="{{ player }}" {% if player in selected_miseres %}checked{% endif %}><span>{{ player }}</span></label>{% endfor %}</div></fieldset>
+
+    <section class="panel" aria-labelledby="roles-heading">
+      <div class="section-heading"><span class="step-number">02</span><div><p class="section-kicker">LES ÉQUIPES</p><h2 id="roles-heading">Qui prend ?</h2></div><span class="section-icon" aria-hidden="true">♥</span></div>
+      <div class="section-body">
+        <h3 class="team-label">Attaque</h3>
+        <div id="native-roles" class="roles-grid">
+          <label class="field" for="preneur"><span>Preneur <b>*</b></span><select id="preneur" name="preneur" required><option value="">Choisir un joueur</option>{% for player in players %}<option value="{{ player }}" {% if player == preneur %}selected{% endif %}>{{ player }}</option>{% endfor %}</select></label>
+          <label class="field" for="partenaire"><span>Partenaire <small>· à 5 joueurs</small></span><select id="partenaire" name="partenaire"><option value="">Aucun · joue seul</option>{% for player in players %}<option value="{{ player }}" {% if player == partenaire %}selected{% endif %}>{{ player }}</option>{% endfor %}</select></label>
+        </div>
+        <div id="card-roles" hidden>
+          <details id="taker-picker" class="taker-picker" open><summary><span>Preneur</span><strong id="taker-summary">Choisir un joueur</strong><span class="taker-edit">Modifier</span></summary><div id="taker-choices" class="player-grid" role="radiogroup" aria-label="Preneur"></div><p id="roles-empty" class="field-help" aria-live="polite">Sélectionne d’abord les joueurs de la partie.</p></details>
+          <details id="partner-field" class="taker-picker" open hidden><summary><span>Partenaire</span><strong id="partner-summary">Aucun · joue seul</strong><span class="taker-edit">Modifier</span></summary><div id="partner-choices" class="player-grid" role="radiogroup" aria-label="Partenaire"></div></details>
+        </div>
+        <div class="defense-block"><h3 class="team-label">Défense</h3><p class="roles-note is-placeholder" id="defenders" aria-live="polite">Les autres joueurs sélectionnés seront en défense.</p></div>
+      </div>
+    </section>
+
+    <section class="panel" aria-labelledby="result-heading">
+      <div class="section-heading"><span class="step-number">03</span><div><p class="section-kicker">LE RÉSULTAT</p><h2 id="result-heading">Quel résultat ?</h2></div><span class="section-icon" aria-hidden="true">♦</span></div>
+      <div class="section-body">
+        <fieldset><legend>Contrat</legend><div class="contract-grid">{% for value, label, multiplier in [(1, 'Petite', '×1'), (2, 'Garde', '×2'), (4, 'Garde sans', '×4'), (6, 'Garde contre', '×6')] %}<label class="tile"><input type="radio" name="enchere" value="{{ value }}" {% if enchere == value|string %}checked{% endif %} required><span><b>{{ label }}</b><small>{{ multiplier }}</small></span></label>{% endfor %}</div></fieldset>
+        <div class="result-grid">
+          <fieldset><legend>Bouts de l’attaque</legend><div class="bouts-grid">{% for value in range(4) %}<label class="tile bout"><input type="radio" name="bouts" value="{{ value }}" data-target="{{ targets[value] }}" {% if bouts == value|string %}checked{% endif %} required><span>{{ value }}</span></label>{% endfor %}</div></fieldset>
+          <div class="field points-field"><label class="points-label" for="points_attaque">Points de l’attaque</label><div class="points-control"><button type="button" class="points-step" id="points-minus" aria-label="Retirer un point" hidden>−1</button><button type="button" class="points-step" id="points-minus-five" aria-label="Retirer cinq points" hidden>−5</button><div class="points-input"><input id="points_attaque" type="number" name="points_attaque" min="0" max="91" step="1" inputmode="numeric" placeholder="0" value="{{ points_attaque }}" required aria-describedby="points-help target-help"><span>/ 91</span></div><button type="button" class="points-step" id="points-plus-five" aria-label="Ajouter cinq points" hidden>+5</button><button type="button" class="points-step" id="points-plus" aria-label="Ajouter un point" hidden>+1</button></div><small id="points-help">Entre 0 et 91 points.</small><small id="target-help" aria-live="polite">{% if bouts in ["0", "1", "2", "3"] %}Seuil à atteindre : {{ targets[bouts | int] }} points.{% else %}Le nombre de bouts fixe le seuil à atteindre.{% endif %}</small></div>
+        </div>
+      </div>
+    </section>
+
+    <details id="extras" class="panel extras{% if selected_miseres or selected_primes_attaque or selected_primes_defense %} has-selections{% endif %}" {% if selected_miseres or selected_primes_attaque or selected_primes_defense %}open{% endif %}>
+      <summary><span class="step-number">04</span><span class="extras-title"><span class="section-kicker">LE PETIT PLUS</span><strong>Primes &amp; misères</strong><small class="extras-optional">Facultatif</small><span id="extras-summary" class="extras-summary" aria-live="polite" {% if not (selected_primes_attaque or selected_primes_defense or selected_miseres) %}hidden{% endif %}>{% if selected_primes_attaque %}Attaque : {{ selected_primes_attaque | join(", ") }}{% endif %}{% if selected_primes_defense %}{% if selected_primes_attaque %} · {% endif %}Défense : {{ selected_primes_defense | join(", ") }}{% endif %}{% if selected_miseres %}{% if selected_primes_attaque or selected_primes_defense %} · {% endif %}Misères : {{ selected_miseres | join(", ") }}{% endif %}</span></span><span class="section-icon" aria-hidden="true">♣</span><span class="extras-arrow" aria-hidden="true">＋</span></summary>
+      <div class="section-body">
+        <fieldset><legend>Primes de l’attaque</legend><div class="extras-grid">{% for prime in primes %}<label class="check"><input type="checkbox" name="primes_attaque" value="{{ prime }}" {% if prime in selected_primes_attaque %}checked{% endif %}><span>{{ prime }}</span></label>{% endfor %}</div></fieldset>
+        <fieldset><legend>Primes de la défense</legend><div class="extras-grid">{% for prime in primes %}<label class="check"><input type="checkbox" name="primes_defense" value="{{ prime }}" {% if prime in selected_primes_defense %}checked{% endif %}><span>{{ prime }}</span></label>{% endfor %}</div></fieldset>
+        <fieldset><legend>Misères <small>· joueurs présents</small></legend><div class="extras-grid" id="misere-choices">{% for player in players %}<label class="check" data-player="{{ player }}"><input type="checkbox" name="miseres" value="{{ player }}" {% if player in selected_miseres %}checked{% endif %}><span>{{ player }}</span></label>{% endfor %}</div><p id="misere-empty" class="field-help" hidden>Sélectionne d’abord les joueurs de la partie.</p></fieldset>
+      </div>
     </details>
-    <button type="submit">Calculer les scores</button>
+
     <div id="preview" aria-live="polite">
-      {% if error %}<article role="alert"><strong>À vérifier :</strong> {{ error }}</article>{% endif %}
+    {% if error %}<div class="error" role="alert" tabindex="-1" id="form-error"><strong>À vérifier</strong><br>{{ error }}</div>{% endif %}
+
       {% if scores is not none %}
-        <article id="score-preview">
-          <h2>Aperçu des scores</h2>
-          <p><strong>{{ game_data.preneur }}</strong> prend{% if game_data.partenaire %} avec <strong>{{ game_data.partenaire }}</strong>{% endif %} contre {{ game_data.defenseurs | join(', ') }}.</p>
-          <p>Contrat : {{ {1: 'Petite', 2: 'Garde', 4: 'Garde Sans', 6: 'Garde Contre'}[game_data.enchere] }} · {{ game_data.points_attaque }} points d’attaque · {{ game_data.bouts }} bout{% if game_data.bouts != 1 %}s{% endif %}.</p>
-          {% if game_data.primes_attaque %}<p>Primes attaque : {{ game_data.primes_attaque | join(', ') }}.</p>{% endif %}
-          {% if game_data.primes_defense %}<p>Primes défense : {{ game_data.primes_defense | join(', ') }}.</p>{% endif %}
-          {% if game_data.miseres %}<p>Misères : {{ game_data.miseres | join(', ') }}.</p>{% endif %}
-          <ul class="score-list">{% for player, score in scores.items() %}<li><span>{{ player }}</span><strong>{{ '%+d'|format(score) }}</strong></li>{% endfor %}</ul>
-          <button type="submit" name="commit_id" value="{{ commit_id }}" formaction="/commit" formmethod="post">Confirmer et publier sur Discord</button>
-          <p class="muted">Si tu modifies la partie, recalcule les scores avant de confirmer.</p>
-        </article>
+      <section class="panel preview" id="score-preview" aria-labelledby="preview-heading">
+        <div class="section-heading"><span class="step-number">✦</span><div><p class="section-kicker">AVANT L’ENREGISTREMENT</p><h2 id="preview-heading">Le récap’</h2></div></div>
+        <div class="section-body">
+          <p class="recap-lead"><strong>{{ game_data.preneur }}</strong> <span>prend{% if game_data.partenaire %} avec{% endif %}</span>{% if game_data.partenaire %} <strong>{{ game_data.partenaire }}</strong>{% endif %} <span>contre</span> {% for player in game_data.defenseurs %}<strong>{{ player }}</strong>{% if not loop.last %}, {% endif %}{% endfor %}.</p>
+          <div class="recap-facts"><div><span>Contrat</span><strong>{{ {1: "Petite", 2: "Garde", 4: "Garde sans", 6: "Garde contre"}[game_data.enchere] }}</strong></div><div><span>Attaque</span><strong>{{ game_data.points_attaque }} points</strong></div><div><span>Bouts</span><strong>{{ game_data.bouts }}</strong></div></div>
+          {% if game_data.primes_attaque or game_data.primes_defense or game_data.miseres %}<dl class="recap-extras">
+            {% if game_data.primes_attaque %}<div><dt>Primes attaque</dt><dd>{{ game_data.primes_attaque | join(", ") }}</dd></div>{% endif %}
+            {% if game_data.primes_defense %}<div><dt>Primes défense</dt><dd>{{ game_data.primes_defense | join(", ") }}</dd></div>{% endif %}
+            {% if game_data.miseres %}<div><dt>Misères</dt><dd>{{ game_data.miseres | join(", ") }}</dd></div>{% endif %}
+          </dl>{% endif %}
+          <h3 class="recap-scores-heading">Scores calculés</h3>
+          <ul class="scores">{% for player, score in scores.items() %}<li><span>{{ player }}</span><strong class="{{ "gain" if score > 0 else "loss" if score < 0 else "" }}">{{ "%+d"|format(score) }}</strong></li>{% endfor %}</ul>
+          <div class="confirm-action"><button class="primary-button confirm-button" type="submit" name="commit_id" value="{{ commit_id }}" formaction="/commit" formmethod="post"><span>Enregistrer la partie</span><span class="confirm-icon" aria-hidden="true">↗</span></button><p class="publish-note">Les scores seront enregistrés et annoncés sur Discord. Toute modification nécessite un nouveau calcul.</p></div>
+        </div>
+      </section>
       {% endif %}
     </div>
+    <div class="action-bar" id="calculate-action"{% if scores is not none %} hidden{% endif %}><div><strong>Tout est prêt ?</strong><small>Vérifie les scores avant d’enregistrer.</small></div><button class="primary-button" type="submit">Calculer les scores <span aria-hidden="true">→</span></button></div>
+    <noscript>{% if scores is not none %}<div class="action-bar"><button class="primary-button" type="submit">Recalculer les scores</button></div>{% endif %}</noscript>
   </form>
 </main>
 </body>

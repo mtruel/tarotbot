@@ -1,5 +1,34 @@
 <!doctype html>
-<html lang="fr"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Tarot · Connexion</title><link rel="stylesheet" href="/static/pico.min.css"><link rel="stylesheet" href="/static/site.css"></head>
-<body><main class="container"><nav><strong>Tarot · Classement</strong></nav>
-<article><h1>Bienvenue sur le Tarot</h1><p>Connecte-toi avec ton compte Discord pour voir les scores et saisir une partie. L’accès est réservé aux membres du serveur.</p><a href="/auth/discord" role="button">Se connecter avec Discord</a></article>
-</main></body></html>
+<html lang="fr" data-theme="light">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  {% if debug %}<meta name="robots" content="noindex">{% endif %}
+  <title>Tarot · Connexion</title>
+  <link rel="icon" type="image/svg+xml" href="/static/favicon.svg">
+  <link rel="stylesheet" href="/static/pico.min.css">
+  <link rel="stylesheet" href="/static/site.css">
+  <link rel="stylesheet" href="/static/unified.css">
+  <link rel="stylesheet" href="/static/aux-theme.css">
+</head>
+<body class="site-theme aux-theme">
+<main class="aux-page">
+  <header class="site-topbar aux-topbar">
+    <strong class="site-brand aux-brand"><span class="site-brand-mark aux-brand-mark" aria-hidden="true">✦</span> TAROT IMB</strong>
+  </header>
+  <div class="site-intro aux-intro">
+    <p class="site-kicker aux-kicker">Tarot · Classement</p>
+    <h1>Bienvenue sur le Tarot</h1>
+  </div>
+  <article class="site-card aux-card aux-welcome">
+    {% if debug %}
+    <p>Connecte-toi au mode debug pour voir les scores et saisir une partie avec des données factices. Cette connexion ne contacte pas Discord.</p>
+    <a class="site-action aux-action" href="/auth/discord" role="button">Se connecter au mode debug</a>
+    {% else %}
+    <p>Connecte-toi avec ton compte Discord pour voir les scores et saisir une partie. L’accès est réservé aux membres du serveur.</p>
+    <a class="site-action aux-action" href="/auth/discord" role="button">Se connecter avec Discord</a>
+    {% endif %}
+  </article>
+</main>
+</body>
+</html>
