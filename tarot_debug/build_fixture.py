@@ -46,7 +46,6 @@ PLAYERS = [
     "Yasmine",
 ]
 ACTIVE_PLAYERS = PLAYERS[:8]
-IDLE_PLAYERS = PLAYERS[8:]
 ENCHERES = [1, 2, 4, 6]
 POIGNEES = ["Simple Poignée", "Double Poignée", "Triple Poignée"]
 CHELEMS = ["Chelem annoncé", "Chelem non annoncé", "Chelem chuté"]

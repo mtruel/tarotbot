@@ -13,4 +13,4 @@ Les sources sont montées en lecture seule depuis ce worktree. Les changements d
 
 Les redémarrages interrompent les requêtes en cours et effacent l'état en mémoire de la console ; les données factices sur disque restent intactes. Arrêter la surveillance avec Ctrl+C : les conteneurs continuent de tourner. Sans surveillance, les changements Python montés nécessitent un redémarrage manuel du service concerné.
 
-Après modification du `Dockerfile`, de `pyproject.toml`, de `uv.lock` ou de la configuration Compose, relancer `docker compose -f docker-compose.debug.yml up -d --build`, puis redémarrer la surveillance. Ne pas définir `DISCORD_TOKEN` et ne jamais copier de données de production dans cette stack.
+Après modification du `Dockerfile`, de `pyproject.toml`, de `uv.lock` ou de la configuration Compose, relancer `docker compose -f docker-compose.debug.yml up -d --build`, puis redémarrer la surveillance. Ne pas définir `DISCORD_TOKEN` et ne jamais copier de données de prod dans cette stack.

@@ -158,21 +158,19 @@ def graph_data(history, players):
 
 def chart_svg(history, players, limit=12):
     """Courbes cumulées avec repères de points et de parties."""
+    return _chart_svg(graph_data(history, list(players)[:limit]))
+
+
+def _chart_svg(data):
     from xml.sax.saxutils import escape
 
-    players = list(players)[:limit]
-    totals = dict.fromkeys(players, 0)
-    lines = {name: [0] for name in players}
-    for game in history:
-        for name in players:
-            totals[name] += game["scores"].get(name, 0)
-            lines[name].append(totals[name])
+    lines = {player["name"]: player["values"] for player in data["players"]}
     values = [v for series in lines.values() for v in series] or [0]
     low, high = min(values), max(values)
     if low == high:
         low, high = low - 1, high + 1
     span = high - low
-    count = max(len(history), 1)
+    count = max(data["games"], 1)
     elements = [
         '<svg viewBox="0 0 800 270" role="img" aria-label="Évolution des points cumulés par numéro de partie" xmlns="http://www.w3.org/2000/svg">'
     ]
@@ -187,7 +185,7 @@ def chart_svg(history, players, limit=12):
     elements.append(
         f'<line x1="75" y1="{zero_y:.1f}" x2="785" y2="{zero_y:.1f}" stroke="currentColor" opacity="0.45"/>'
     )
-    for index in sorted({0, len(history) // 2, len(history)}):
+    for index in sorted({0, data["games"] // 2, data["games"]}):
         x = 75 + 710 * index / count
         elements.append(
             f'<text x="{x:.1f}" y="245" text-anchor="middle" fill="currentColor" font-size="11">{index}</text>'
@@ -283,6 +281,31 @@ async def create_app(*, http=None, config=None):
 
     def signed_cookie(sid):
         return f"{sid}.{hmac.digest(session_secret, sid.encode(), 'sha256').hex()}"
+
+    def create_session(*, access, user, expires, guild_checked=None):
+        sid = secrets.token_urlsafe(32)
+        session = {
+            "access": access,
+            "user": user,
+            "csrf": secrets.token_urlsafe(32),
+            "expires": expires,
+            "preview": None,
+            "commits": deque(),
+        }
+        if guild_checked is not None:
+            session["guild_checked"] = guild_checked
+        sessions[sid] = session
+        return sid
+
+    def session_cookie(response, sid, max_age):
+        response.set_cookie(
+            COOKIE,
+            signed_cookie(sid),
+            max_age=max_age,
+            httponly=True,
+            secure=True,
+            samesite="Lax",
+        )
 
     async def close_sessions(_app):
         sessions.clear()
@@ -380,28 +403,14 @@ async def create_app(*, http=None, config=None):
             sid = verify_cookie(request.cookies.get(COOKIE, ""))
             if sid in sessions:
                 raise web.HTTPFound("/")
-            sid = secrets.token_urlsafe(32)
             max_age = 43200
-            sessions[sid] = {
-                "access": "",
-                "user": {
-                    "id": "1",
-                    "name": os.environ.get("TAROT_DEBUG_USER_NAME", "Debug User"),
-                },
-                "csrf": secrets.token_urlsafe(32),
-                "expires": now + max_age,
-                "preview": None,
-                "commits": deque(),
-            }
-            response = web.HTTPFound("/")
-            response.set_cookie(
-                COOKIE,
-                signed_cookie(sid),
-                max_age=max_age,
-                httponly=True,
-                secure=True,
-                samesite="Lax",
+            sid = create_session(
+                access="",
+                user={"id": "1", "name": os.environ.get("TAROT_DEBUG_USER_NAME", "Debug User")},
+                expires=now + max_age,
             )
+            response = web.HTTPFound("/")
+            session_cookie(response, sid, max_age)
             raise response
         nonce = secrets.token_urlsafe(32)
         for key, expiry in list(pending_login.items()):
@@ -455,31 +464,21 @@ async def create_app(*, http=None, config=None):
         guilds = await discord_get("/users/@me/guilds", access)
         if guild_id not in {g["id"] for g in guilds}:
             raise web.HTTPForbidden(text="Compte hors du serveur")
-        sid = secrets.token_urlsafe(32)
-        sessions[sid] = {
-            "access": access,
-            "user": {"id": user["id"], "name": user.get("global_name") or user["username"]},
-            "csrf": secrets.token_urlsafe(32),
-            "expires": time.monotonic() + min(43200, int(token.get("expires_in", 3600))),
-            "guild_checked": time.monotonic() + 300,
-            "preview": None,
-            "commits": deque(),
-        }
-        result = web.HTTPFound("/")
-        result.set_cookie(
-            COOKIE,
-            signed_cookie(sid),
-            max_age=min(43200, int(token.get("expires_in", 3600))),
-            httponly=True,
-            secure=True,
-            samesite="Lax",
+        max_age = min(43200, int(token.get("expires_in", 3600)))
+        sid = create_session(
+            access=access,
+            user={"id": user["id"], "name": user.get("global_name") or user["username"]},
+            expires=time.monotonic() + max_age,
+            guild_checked=time.monotonic() + 300,
         )
+        result = web.HTTPFound("/")
+        session_cookie(result, sid, max_age)
         result.del_cookie("oauth_state")
         raise result
 
     async def home(request):
         if request[SESSION_KEY] is None:
-            return page("login.html") if debug else render("login.html")
+            return page("login.html")
         snapshot = await state()
         history = snapshot["history"]
         players = snapshot["players"]
@@ -498,10 +497,11 @@ async def create_app(*, http=None, config=None):
         history = snapshot["history"]
         names = known_players(history, snapshot["players"])
         totals = compute_scores(history, snapshot["players"])
+        chart_data = graph_data(history, names)
         return page(
             "graphs.html",
-            chart=chart_svg(history, names, limit=None),
-            chart_data=graph_data(history, names),
+            chart=_chart_svg(chart_data),
+            chart_data=chart_data,
             legend=[{"name": name, "total": totals[name]} for name in names],
             games=len(history),
             user=request[SESSION_KEY]["user"],
@@ -540,7 +540,9 @@ async def create_app(*, http=None, config=None):
         result.del_cookie(COOKIE)
         raise result
 
-    def game_page(request, names, form=None, *, error="", scores=None, commit_id=""):
+    def game_page(
+        request, names, form=None, *, error="", scores=None, commit_id="", game_data=None
+    ):
         return page(
             "game.html",
             players=names,
@@ -560,7 +562,7 @@ async def create_app(*, http=None, config=None):
             error=error,
             scores=scores,
             commit_id=commit_id,
-            game_data=parse_form(form) if scores is not None else None,
+            game_data=game_data,
         )
 
     async def game(request):
@@ -613,6 +615,7 @@ async def create_app(*, http=None, config=None):
             error=saved["error"],
             scores=saved["scores"],
             commit_id=saved["commit_id"],
+            game_data=previewed[1] if saved["scores"] is not None else None,
         )
 
     async def commit(request):

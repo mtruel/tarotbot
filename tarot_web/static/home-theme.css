@@ -10,25 +10,14 @@ body.home-page {
 }
 
 .home-page .home-shell { width: min(100% - 40px, 1100px); margin: 0 auto; padding-bottom: 36px; }
-.home-page .home-topbar { min-height: 83px; display: flex; align-items: center; justify-content: space-between; gap: 16px; border-bottom: 1px solid #dedfd6; }
-.home-page .home-brand { display: inline-flex; align-items: center; gap: 9px; color: #242e2b; font-size: 13px; font-weight: 800; letter-spacing: .13em; text-decoration: none; white-space: nowrap; }
-.home-page .home-brand-mark { display: grid; place-items: center; flex: none; width: 32px; height: 32px; border-radius: 9px; background: #234b3f; color: #e4c28e; font-size: 18px; }
-.home-page .home-brand-light { color: #66766c; font-weight: 500; }
-.home-page .home-secondary-link { color: #234b3f; font-size: 13px; font-weight: 650; text-align: right; text-decoration: none; }
-.home-page .home-secondary-link:hover { text-decoration: underline; }
+
 .home-page .home-intro { display: flex; justify-content: space-between; align-items: end; gap: 20px; padding: 28px 4px 24px; }
 .home-page .home-kicker { margin: 0 0 5px; color: #8a623f; font-size: 10px; font-weight: 800; letter-spacing: .15em; }
 .home-page h1, .home-page h2 { color: #242e2b; font-family: Georgia, "Times New Roman", serif; }
 .home-page h1 { margin: 0; font-size: 36px; line-height: 1.1; letter-spacing: -.04em; }
 .home-page h1 em { color: #234b3f; font-weight: 400; }
 .home-page .home-account { margin: 10px 0 0; color: #52645a; font-size: 13px; overflow-wrap: anywhere; }
-.home-page .home-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; }
-.home-page .home-actions form { margin: 0; }
-.home-page .home-action, .home-page .home-logout { display: inline-flex; align-items: center; justify-content: center; gap: 18px; min-height: 46px; width: auto; margin: 0; padding: 10px 16px; border: 1px solid #234b3f; border-radius: 9px; font-size: 13px; font-weight: 700; text-decoration: none; cursor: pointer; }
-.home-page .home-action { background: #234b3f; color: #fff; }
-.home-page .home-action:hover { background: #183b31; border-color: #183b31; }
-.home-page .home-logout { background: transparent; color: #234b3f; }
-.home-page .home-logout:hover { background: #e9efe8; }
+
 .home-page .home-card { margin: 0 0 14px; padding: 24px 26px; border: 1px solid #e8eae4; border-radius: 16px; background: #fff; box-shadow: 0 5px 25px rgba(39, 54, 43, .035); }
 .home-page .home-card-heading { display: flex; align-items: center; justify-content: space-between; gap: 14px; margin-bottom: 18px; }
 .home-page .home-card h2 { margin: 0; font-size: 24px; line-height: 1.15; letter-spacing: -.025em; }
@@ -41,21 +30,10 @@ body.home-page {
 .home-page .graphs-legend-heading span { color: #78867b; font-weight: 500; }
 .home-page .graphs-legend { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 220px), 1fr)); gap: 8px; margin: 0; padding: 0; list-style: none; }
 .home-page .graphs-legend li { display: flex; align-items: center; gap: 9px; min-width: 0; margin: 0; padding: 9px 11px; border: 1px solid #e8eae4; border-radius: 9px; font-size: 13px; }
-.home-page .graphs-color { flex: none; width: 18px; height: 3px; border-radius: 2px; }
+
 .home-page .graphs-player { flex: 1; min-width: 0; overflow-wrap: anywhere; }
 .home-page .graphs-total { color: #234b3f; font-variant-numeric: tabular-nums; }
-.home-page .graphs-color-0 { background: hsl(0 65% 45%); }
-.home-page .graphs-color-1 { background: hsl(137 65% 45%); }
-.home-page .graphs-color-2 { background: hsl(274 65% 45%); }
-.home-page .graphs-color-3 { background: hsl(51 65% 45%); }
-.home-page .graphs-color-4 { background: hsl(188 65% 45%); }
-.home-page .graphs-color-5 { background: hsl(325 65% 45%); }
-.home-page .graphs-color-6 { background: hsl(102 65% 45%); }
-.home-page .graphs-color-7 { background: hsl(239 65% 45%); }
-.home-page .graphs-color-8 { background: hsl(16 65% 45%); }
-.home-page .graphs-color-9 { background: hsl(153 65% 45%); }
-.home-page .graphs-color-10 { background: hsl(290 65% 45%); }
-.home-page .graphs-color-11 { background: hsl(67 65% 45%); }
+
 .home-page .home-note, .home-page .home-scroll-hint { color: #52645a; font-size: 12px; }
 .home-page .home-note { margin: 12px 0 0; }
 .home-page .home-scroll-hint { display: none; margin: 0 0 10px; }
@@ -112,11 +90,10 @@ body.home-page {
 
 @media (max-width: 700px) {
   .home-page .home-shell { width: min(100% - 24px, 1100px); }
-  .home-page .home-topbar { min-height: 64px; }
+
   .home-page .home-intro { align-items: stretch; flex-direction: column; padding: 20px 2px; }
   .home-page h1 { font-size: 28px; }
-  .home-page .home-actions { align-items: stretch; }
-  .home-page .home-action { flex: 1; }
+
   .home-page .home-card { padding: 19px 18px; }
   .home-page .home-card h2 { font-size: 22px; }
   .home-page .home-scroll-hint { display: block; }
@@ -127,10 +104,4 @@ body.home-page {
   .home-page .home-ranking tr > :nth-child(2) { position: static; box-shadow: none; }
   .home-page .home-history-card { padding: 13px; }
   .home-page .home-teams { grid-template-columns: minmax(0, 1fr); }
-}
-
-@media (max-width: 360px) {
-  .home-page .home-secondary-link { max-width: 150px; }
-  .home-page .home-actions { flex-direction: column; }
-  .home-page .home-action, .home-page .home-logout, .home-page .home-actions form { width: 100%; }
 }

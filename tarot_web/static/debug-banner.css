@@ -1,0 +1,11 @@
+.debug-banner{position:sticky;top:0;z-index:10;margin:0;background:#f5b301;color:#1b1b1b;font-size:.8rem}
+.debug-banner>summary:not([role]),.debug-banner[open]>summary:not([role]):not(:focus),.debug-banner>summary:focus:not([role]){margin:0;padding:.2rem 1rem;color:#1b1b1b;cursor:pointer;list-style:none}
+.debug-banner>summary::-webkit-details-marker{display:none}
+.debug-banner>summary:focus-visible:not([role]){outline:2px solid #1b1b1b;outline-offset:-2px}
+.debug-banner>summary::after{float:none;display:inline-block;width:auto;height:auto;margin-left:.5rem;background:none;transform:none;content:'▸'}
+.debug-banner[open]>summary::after{transform:none;content:'▾'}
+.debug-content{display:flex;flex-wrap:wrap;align-items:center;gap:.5rem 1rem;padding:.3rem 1rem .5rem}
+.debug-banner form{margin:0}
+.debug-banner button{margin:0;padding:.25rem .75rem;width:auto}
+.debug-banner a{color:#1b1b1b;text-decoration:underline}
+.debug-meta{opacity:.8}

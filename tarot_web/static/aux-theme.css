@@ -49,21 +49,7 @@ body.aux-theme {
   font-size: 18px;
 }
 
-.aux-theme .aux-nav {
-  display: flex;
-  flex-wrap: wrap;
-  justify-content: flex-end;
-  gap: 8px 18px;
-}
 
-.aux-theme .aux-back {
-  color: #234b3f;
-  font-size: 13px;
-  font-weight: 650;
-  text-decoration: none;
-}
-
-.aux-theme .aux-back:hover { text-decoration: underline; }
 .aux-theme .aux-intro { padding: 24px 4px 20px; }
 .aux-theme .aux-kicker {
   margin: 0 0 6px;
@@ -177,9 +163,4 @@ body.aux-theme {
   .aux-theme .console-form { flex-wrap: wrap; }
   .aux-theme .console-form input { flex-basis: 100%; }
   .aux-theme .console-form button { width: 100%; }
-}
-
-@media (max-width: 360px) {
-  .aux-theme .aux-console .aux-topbar { align-items: flex-start; flex-direction: column; gap: 10px; }
-  .aux-theme .aux-console .aux-nav { justify-content: flex-start; }
 }

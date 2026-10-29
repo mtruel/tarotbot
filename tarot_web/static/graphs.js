@@ -25,7 +25,8 @@
         return iso ? `${iso[2]}/${iso[1]}` : "";
       }
 
-      const colors = data.players.map((_, index) => `hsl(${Math.round(index * 137.508) % 360}, 65%, 32%)`);
+      // Match chart_svg's palette while using the HSL syntax understood by ECharts.
+      const colors = data.players.map((_, index) => `hsl(${index * 137 % 360}, 65%, 45%)`);
       const labels = Array.from({ length: data.games + 1 }, (_, index) => String(index));
       const dates = data.dates.map(shortDate);
       const fragment = document.createDocumentFragment();

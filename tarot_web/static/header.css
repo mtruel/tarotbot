@@ -127,7 +127,7 @@
   cursor: pointer;
 }
 .app-header .app-header-account form button:hover { border-color: #234b3f; background: #e9efe8; color: #234b3f; }
-.app-header :is(a, summary, button):focus-visible { outline: 3px solid #bc8a53; outline-offset: 2px; }
+.app-header.app-header :is(a, summary, button):focus-visible { outline: 3px solid #bc8a53; outline-offset: 2px; }
 
 @media (max-width: 720px) {
   .app-header {
