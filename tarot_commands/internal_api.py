@@ -14,6 +14,29 @@ from tarot_commands.history import append_related_message_id, update_history
 from tarot_commands.state import load_history, load_player_names
 from tarot_commands.web_game import validate_game
 
+WEB_URL = "https://tarot-imb.beta.public.truel.fr"
+ENCHERE_TOKENS = {1: "petite", 2: "garde", 4: "garde sans", 6: "garde contre"}
+
+
+def web_saisie_phrase(session) -> str:
+    """Commande t/auto qui reconstitue la partie saisie."""
+    parts = [
+        session.game_players["Preneur"][0],
+        ENCHERE_TOKENS[session.enchere],
+        str(session.points_attaque),
+        str(session.bouts),
+    ]
+    if session.game_players["Partenaire"]:
+        parts += ["avec", session.game_players["Partenaire"][0]]
+    parts += ["vs", *session.game_players["Défenseurs"]]
+    if session.primes_attaque:
+        parts += ["prime", *(prime.lower() for prime in session.primes_attaque)]
+    if session.primes_defense:
+        parts += ["prime défense", *(prime.lower() for prime in session.primes_defense)]
+    if session.miseres:
+        parts += ["misere", *session.miseres]
+    return "t/auto " + " ".join(parts)
+
 
 async def create_app(bot, *, token=None, channel_id=None, channel_type=None):
     secret = token if token is not None else os.environ.get("TAROT_INTERNAL_TOKEN", "")
@@ -74,18 +97,18 @@ async def create_app(bot, *, token=None, channel_id=None, channel_type=None):
                     raise web.HTTPServiceUnavailable(text="Salon inaccessible")
                 # Aucun await entre la lecture et l'écriture dans update_history.
                 announcement = await target.send(
-                    f"Partie saisie sur le web par {discord.utils.escape_mentions(author['name'])} "
-                    f"({author['id']}). Contrat : {session.enchere}, "
-                    f"preneur : {discord.utils.escape_mentions(session.game_players['Preneur'][0])}. "
-                    f"Bouts : {session.bouts}, points attaque : {session.points_attaque}. "
-                    f"Partenaire : {discord.utils.escape_mentions(session.game_players['Partenaire'][0]) if session.game_players['Partenaire'] else 'aucun'}. "
-                    f"Défense : {', '.join(discord.utils.escape_mentions(p) for p in session.game_players['Défenseurs'])}. "
-                    f"Primes attaque : {', '.join(session.primes_attaque) or 'aucune'} ; "
-                    f"primes défense : {', '.join(session.primes_defense) or 'aucune'} ; "
-                    f"misères : {', '.join(discord.utils.escape_mentions(p) for p in session.miseres) or 'aucune'}. "
-                    f"Référence web : {commit_id}.",
+                    f"Saisie [web]({WEB_URL}) par {discord.utils.escape_mentions(author['name'])}.\n"
+                    f"`{web_saisie_phrase(session)}`",
                     allowed_mentions=discord.AllowedMentions.none(),
                 )
+                # L'id canonique de la partie est l'id de l'annonce, inconnu avant
+                # l'envoi : on l'ajoute par edition pour que t/edit / t/delete /
+                # t/history lisent un id qui designe bien cette partie, et non
+                # l'id Discord de l'auteur web.
+                with contextlib.suppress(discord.HTTPException):
+                    await announcement.edit(
+                        content=f"{announcement.content}\n-# id: `{announcement.id}`"
+                    )
                 session.request_message_id = announcement.id
                 details = partie_details(session)
                 details.update(web_author={"id": author["id"], "name": author["name"]})

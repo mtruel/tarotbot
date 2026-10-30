@@ -793,6 +793,39 @@ class StateTests(unittest.TestCase):
         self.assertNotIn("Matthis", str(raised.exception))
         game.reset_cache()
 
+    def test_autoparse_prime_attaque_and_defense_after_vs(self):
+        cases = {
+            "Alice garde 45 2 vs Bob Carol prime attaque petit au bout": (
+                ["Petit au bout"],
+                [],
+            ),
+            "Alice garde 45 2 vs Bob Carol prime défense petit au bout": (
+                [],
+                ["Petit au bout"],
+            ),
+            "Alice garde 45 2 vs Bob Carol primes défense simple poignée": (
+                [],
+                ["Simple Poignée"],
+            ),
+            "Alice garde 45 2 vs Bob Carol prime petit au bout prime défense chelem annoncé": (
+                ["Petit au bout"],
+                ["Chelem annoncé"],
+            ),
+            "Alice garde 45 2 vs Bob Carol prime défense simple poignée prime petit au bout": (
+                ["Petit au bout"],
+                ["Simple Poignée"],
+            ),
+        }
+        for body, (attaque, defense) in cases.items():
+            with self.subTest(body=body):
+                game.reset_cache()
+                session = game.create_session(510, source="auto")
+                game.autoparse(body, session)
+                self.assertEqual(session.game_players["Défenseurs"], ["Bob", "Carol"])
+                self.assertEqual(session.primes_attaque, attaque)
+                self.assertEqual(session.primes_defense, defense)
+        game.reset_cache()
+
     def test_edit_missing_body_keeps_session_for_correction(self):
         game.reset_cache()
         save_history([{"message_id": 1557730091864301699, "type": "partie", "scores": {}}])

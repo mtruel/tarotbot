@@ -14,8 +14,9 @@ from aiohttp import CookieJar
 from aiohttp.test_utils import TestClient, TestServer
 from multidict import MultiDict
 
+from tarot_commands.game import autoparse
 from tarot_commands.internal_api import create_app as create_internal_app
-from tarot_commands.sessions import find_history_by_message_id
+from tarot_commands.sessions import find_history_by_message_id, temp_session
 from tarot_commands.state import load_history
 from tarot_commands.web_game import InvalidGame, validate_game
 from tarot_web.app import (
@@ -367,20 +368,28 @@ class TestValidation(unittest.TestCase):
 
 
 class FakeMessage:
-    def __init__(self, message_id):
+    def __init__(self, message_id, content=""):
         self.id = message_id
+        self.content = content
 
     async def delete(self):
         pass
+
+    async def edit(self, *, content=None, **_kwargs):
+        if content is not None:
+            self.content = content
 
 
 class FakeChannel:
     def __init__(self):
         self.sent = []
+        self.messages = []
 
     async def send(self, text, **kwargs):
         self.sent.append((text, kwargs))
-        return FakeMessage(100 + len(self.sent))
+        message = FakeMessage(100 + len(self.sent), text)
+        self.messages.append(message)
+        return message
 
 
 class FakeBot:
@@ -453,6 +462,59 @@ class TestInternalAPI(unittest.IsolatedAsyncioTestCase):
         self.assertNotEqual(entry["scores"]["Alice"], 999999)
         self.assertIn("id: `101`", self.channel.sent[1][0])
         self.assertTrue(all("allowed_mentions" in kwargs for _text, kwargs in self.channel.sent))
+
+    async def test_commit_announcement_carries_game_id(self):
+        """L'id affiché dans l'annonce d'une partie web doit retrouver la partie.
+
+        `t/edit` et `t/delete` lisent un id dans l'annonce : ce doit être
+        l'id canonique de la partie, pas l'id Discord de l'auteur web.
+        """
+        headers = {"Authorization": "Bearer internal-api-test-token-long-enough"}
+        payload = {
+            "commit_id": str(uuid4()),
+            "web_author": {"id": "42", "name": "Test"},
+            "game": dict(GAME),
+        }
+        response = await self.client.post("/commit", json=payload, headers=headers)
+        self.assertEqual(response.status, 200, await response.text())
+
+        announcement = self.channel.messages[0]
+        self.assertIn("-# id: `101`", announcement.content)
+        self.assertIn(
+            "Saisie [web](https://tarot-imb.beta.public.truel.fr) par Test.", announcement.content
+        )
+        # L'id Discord de l'auteur web n'est pas un id de partie : il ne doit
+        # plus s'afficher comme tel dans l'annonce.
+        self.assertNotIn("(42)", announcement.content)
+        phrase = re.search(r"`(t/auto [^`]+)`", announcement.content)
+        self.assertIsNotNone(phrase)
+        session = temp_session()
+        autoparse(phrase.group(1)[len("t/auto ") :], session)
+        self.assertEqual(session.game_players["Preneur"], ["Alice"])
+        self.assertEqual(session.game_players["Défenseurs"], ["Bob", "Claire", "David"])
+        self.assertEqual(session.points_attaque, 54)
+        self.assertEqual(session.bouts, 1)
+        self.assertEqual(session.enchere, 2)
+
+        defense_game = {**GAME, "primes_defense": ["Petit au bout"]}
+        response = await self.client.post(
+            "/commit",
+            json={
+                "commit_id": str(uuid4()),
+                "web_author": {"id": "42", "name": "Test"},
+                "game": defense_game,
+            },
+            headers=headers,
+        )
+        self.assertEqual(response.status, 200, await response.text())
+        phrase = re.search(r"`(t/auto [^`]+)`", self.channel.messages[-2].content)
+        self.assertIsNotNone(phrase)
+        session = temp_session()
+        autoparse(phrase.group(1)[len("t/auto ") :], session)
+        self.assertEqual(session.primes_defense, ["Petit au bout"])
+
+        entry = find_history_by_message_id(load_history(), 101)
+        self.assertIsNotNone(entry)
 
     async def test_bad_game(self):
         headers = {"Authorization": "Bearer internal-api-test-token-long-enough"}

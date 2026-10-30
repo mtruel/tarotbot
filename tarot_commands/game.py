@@ -780,10 +780,11 @@ def str_idx_to_split_idx(s, str_idx, split=" "):
         split_start_idx_in_str += len(e) + 1
 
 
-def find_split_idx_of_subsequence(s, sub, split=" "):
+def find_split_idx_of_subsequence(s, sub, split=" ", *, first=False):
     """
     Finds the index within s.split(split) of the last element of sub.split(split)
     For example if s = 'i am now a tuna', the output for split=' ' and sub='now a' is 3.
+    With first=True, returns the index of the first element of sub instead.
 
     Parameters
     ----------
@@ -793,6 +794,8 @@ def find_split_idx_of_subsequence(s, sub, split=" "):
         substring to locate within s
     split : str, optional
         split argument for s.split(split), default to ' '
+    first : bool, optional
+        return the index of the first element of sub rather than the last
 
     Returns
     -------
@@ -801,7 +804,8 @@ def find_split_idx_of_subsequence(s, sub, split=" "):
     str_idx = s.find(sub)  # let it raise ValueError if not found
     if str_idx == -1:
         raise ValueError(f"sub {sub} is not a substring of {s}")
-    return str_idx_to_split_idx(s, str_idx + len(sub) - 1, split)
+    end_idx = str_idx if first else str_idx + len(sub) - 1
+    return str_idx_to_split_idx(s, end_idx, split)
 
 
 def clean_msg(msg):
@@ -921,10 +925,14 @@ def autoparse(msg, session: GameSession):
         exists_prime_a = "prime att" in msg_decode_lower or "primes att" in msg_decode_lower
         if exists_prime_a:  # find primes attaque something
             try:
-                prime_a_idx = find_split_idx_of_subsequence(msg_decode_lower, "prime att")
+                prime_a_idx = find_split_idx_of_subsequence(
+                    msg_decode_lower, "prime att", first=True
+                )
             except ValueError:
                 try:
-                    prime_a_idx = find_split_idx_of_subsequence(msg_decode_lower, "primes att")
+                    prime_a_idx = find_split_idx_of_subsequence(
+                        msg_decode_lower, "primes att", first=True
+                    )
                 except ValueError:
                     raise ParseError(
                         "prime attaque est indiqué mais introuvable. "
@@ -934,23 +942,39 @@ def autoparse(msg, session: GameSession):
         exists_prime_d = "prime def" in msg_decode_lower or "primes def" in msg_decode_lower
         if exists_prime_d:  # find prime(s) défense something
             try:
-                prime_d_idx = find_split_idx_of_subsequence(msg_decode_lower, "prime def")
+                prime_d_idx = find_split_idx_of_subsequence(
+                    msg_decode_lower, "prime def", first=True
+                )
             except ValueError:
                 try:
-                    prime_d_idx = find_split_idx_of_subsequence(msg_decode_lower, "primes def")
+                    prime_d_idx = find_split_idx_of_subsequence(
+                        msg_decode_lower, "primes def", first=True
+                    )
                 except ValueError:
                     raise ParseError(
                         "prime défense est indiqué mais introuvable. "
                         "Écris prime défense puis les primes."
                     ) from None
-        if not (exists_prime_a or exists_prime_d):  # only prime, assume for attack
+        if not exists_prime_a and not exists_prime_d:  # only prime, assume for attack
             try:
-                prime_a_idx = find_split_idx_of_subsequence(msg_decode_lower, "prime")
+                prime_a_idx = find_split_idx_of_subsequence(msg_decode_lower, "prime", first=True)
             except ValueError:
                 raise ParseError(
                     "Le mot prime est indiqué mais introuvable. "
                     "Écris prime, prime attaque ou prime défense."
                 ) from None
+        elif not exists_prime_a:
+            # prime nu accompagné de prime défense : le premier prime nu est l'attaque
+            bare = [
+                idx
+                for idx, word in enumerate(msg_decode_lower_list)
+                if word == "prime"
+                and (
+                    idx + 1 == len(msg_decode_lower_list)
+                    or msg_decode_lower_list[idx + 1] != "defense"
+                )
+            ]
+            prime_a_idx = bare[0] if bare else None
 
     segments_idx = sorted(
         [
